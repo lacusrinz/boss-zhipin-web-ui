@@ -33,9 +33,15 @@ jobs:
         pyinstaller web_app.spec --clean
 
     - name: Copy user manual
+      shell: pwsh
       run: |
-        copy code\用户使用说明.txt dist\
-        mkdir dist\data
+        cd code
+        if (Test-Path "dist") {
+          Copy-Item "用户使用说明.txt" "dist\"
+        }
+        if (!(Test-Path "dist\data")) {
+          New-Item -ItemType Directory -Path "dist\data"
+        }
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
