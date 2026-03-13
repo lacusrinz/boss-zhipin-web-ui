@@ -8,8 +8,8 @@ PyInstaller 规范文件
 import sys
 from pathlib import Path
 
-# 获取项目根目录
-base_dir = Path(__file__).parent.parent
+# 获取当前目录（spec 文件所在目录）
+base_dir = Path(__file__).parent
 
 block_cipher = None
 
@@ -18,8 +18,8 @@ a = Analysis(
     pathex=[str(base_dir)],
     binaries=[],
     datas=[
-        # 包含模板文件
-        (str(base_dir / 'code' / 'templates'), 'templates'),
+        # 包含模板文件（相对于 spec 文件所在目录）
+        (str(base_dir / 'templates'), 'templates'),
     ],
     hiddenimports=[
         'bs4',
