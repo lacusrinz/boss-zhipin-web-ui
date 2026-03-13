@@ -4,6 +4,7 @@
 使用 SQLite 存储岗位和企业信息
 """
 
+import sys
 import sqlite3
 import logging
 from pathlib import Path
@@ -22,8 +23,14 @@ class BOSSDatabase:
             db_path: 数据库文件路径，默认为项目根目录下的 boss_jobs.db
         """
         if db_path is None:
-            # 默认路径：项目根目录下的 data/boss_jobs.db
-            base_dir = Path(__file__).parent.parent
+            # 确定基础目录（支持开发环境和打包后的 exe 环境）
+            if getattr(sys, 'frozen', False):
+                # 打包后的 exe 环境
+                base_dir = Path(sys.executable).parent
+            else:
+                # 开发环境
+                base_dir = Path(__file__).parent.parent
+
             db_path = base_dir / "data" / "boss_jobs.db"
 
         self.db_path = Path(db_path)
@@ -58,6 +65,7 @@ class BOSSDatabase:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
                     url TEXT,
+                    is_imported BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -376,6 +384,182 @@ class BOSSDatabase:
         except Exception as e:
             logging.error(f"导出数据失败: {e}")
             return {'companies': [], 'jobs': []}
+
+    def add_is_imported_column(self):
+        """
+        为现有的 companies 表添加 is_imported 列
+        用于数据库升级
+        """
+        try:
+            # 检查列是否已存在
+            self.cursor.execute("PRAGMA table_info(companies)")
+            columns = [col[1] for col in self.cursor.fetchall()]
+
+            if 'is_imported' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE companies ADD COLUMN is_imported BOOLEAN DEFAULT 0
+                """)
+                self.conn.commit()
+                logging.info("已添加 is_imported 列到 companies 表")
+                return True
+            else:
+                logging.info("is_imported 列已存在，无需添加")
+                return True
+
+        except Exception as e:
+            logging.error(f"添加 is_imported 列失败: {e}")
+            return False
+
+    def toggle_company_imported(self, company_id: int) -> Optional[bool]:
+        """
+        切换企业入库状态
+
+        Args:
+            company_id: 企业 ID
+
+        Returns:
+            bool: 新的入库状态，失败返回 None
+        """
+        try:
+            # 获取当前状态
+            self.cursor.execute("""
+                SELECT is_imported FROM companies WHERE id = ?
+            """, (company_id,))
+
+            result = self.cursor.fetchone()
+            if result is None:
+                logging.warning(f"企业 ID {company_id} 不存在")
+                return None
+
+            current_status = result[0]
+            new_status = 0 if current_status else 1
+
+            # 更新状态
+            self.cursor.execute("""
+                UPDATE companies SET is_imported = ? WHERE id = ?
+            """, (new_status, company_id))
+
+            self.conn.commit()
+            logging.info(f"企业 ID {company_id} 入库状态已切换为 {new_status}")
+            return bool(new_status)
+
+        except Exception as e:
+            logging.error(f"切换企业入库状态失败: {e}")
+            return None
+
+    def batch_import_companies(self, company_ids: List[int]) -> int:
+        """
+        批量标记企业为已入库
+
+        Args:
+            company_ids: 企业 ID 列表
+
+        Returns:
+            int: 成功更新的企业数量
+        """
+        if not company_ids:
+            return 0
+
+        try:
+            # 使用事务批量更新
+            placeholders = ','.join(['?' for _ in company_ids])
+            query = f"""
+                UPDATE companies
+                SET is_imported = 1
+                WHERE id IN ({placeholders})
+            """
+
+            self.cursor.execute(query, company_ids)
+            self.conn.commit()
+
+            updated_count = self.cursor.rowcount
+            logging.info(f"批量更新 {updated_count} 家企业为已入库")
+            return updated_count
+
+        except Exception as e:
+            logging.error(f"批量更新企业状态失败: {e}")
+            self.conn.rollback()
+            return 0
+
+    def get_companies_with_import_status(self, filter_type: str = 'all') -> List[Dict]:
+        """
+        获取企业列表，支持按入库状态筛选
+        只返回有 URL 的企业
+
+        Args:
+            filter_type: 筛选类型 'all' | 'imported' | 'unimported'
+
+        Returns:
+            list: 企业信息列表
+        """
+        try:
+            query = """
+                SELECT
+                    c.id,
+                    c.name,
+                    c.url,
+                    c.is_imported,
+                    COUNT(j.id) as job_count,
+                    GROUP_CONCAT(DISTINCT j.location) as locations
+                FROM companies c
+                LEFT JOIN jobs j ON c.id = j.company_id
+                WHERE c.url IS NOT NULL AND c.url != ''
+            """
+
+            # 添加筛选条件
+            if filter_type == 'imported':
+                query += " AND c.is_imported = 1"
+            elif filter_type == 'unimported':
+                query += " AND c.is_imported = 0"
+
+            query += " GROUP BY c.id, c.name, c.url, c.is_imported ORDER BY c.id DESC"
+
+            self.cursor.execute(query)
+            rows = self.cursor.fetchall()
+
+            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations']
+
+            return [dict(zip(columns, row)) for row in rows]
+
+        except Exception as e:
+            logging.error(f"获取企业列表失败: {e}")
+            return []
+
+    def get_all_jobs(self) -> List[Dict]:
+        """
+        获取所有岗位信息
+
+        Returns:
+            list: 岗位信息列表
+        """
+        try:
+            query = """
+                SELECT
+                    j.id,
+                    j.job_name,
+                    j.salary,
+                    c.name as company_name,
+                    j.location,
+                    j.experience,
+                    j.education,
+                    j.source,
+                    j.collection_time
+                FROM jobs j
+                JOIN companies c ON j.company_id = c.id
+                ORDER BY j.id DESC
+            """
+
+            self.cursor.execute(query)
+            rows = self.cursor.fetchall()
+
+            columns = ['id', 'job_name', 'salary', 'company_name', 'location',
+                      'experience', 'education', 'source', 'collection_time']
+
+            return [dict(zip(columns, row)) for row in rows]
+
+        except Exception as e:
+            logging.error(f"获取岗位列表失败: {e}")
+            return []
 
 
 def main():

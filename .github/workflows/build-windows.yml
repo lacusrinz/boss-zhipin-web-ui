@@ -1,0 +1,54 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+      - feature/*
+    tags:
+      - 'v*'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        cd code
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Build EXE with PyInstaller
+      run: |
+        cd code
+        pyinstaller web_app.spec --clean
+
+    - name: Copy user manual
+      run: |
+        copy code\用户使用说明.txt dist\
+        mkdir dist\data
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: BOSS直聘管理工具-Windows
+        path: code/dist/
+        retention-days: 30
+
+    - name: Create Release (if tagged)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: code/dist/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

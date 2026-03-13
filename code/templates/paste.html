@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}粘贴数据 - BOSS 直聘管理{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">粘贴 BOSS 直聘 HTML 源码</h1>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+            <h3 class="font-semibold text-blue-800 mb-2">📖 使用说明</h3>
+            <ol class="list-decimal list-inside text-blue-700 space-y-1 text-sm">
+                <li>在 BOSS 直聘搜索页面，右键点击页面</li>
+                <li>选择"查看网页源代码"（或按 Ctrl+U / Cmd+U）</li>
+                <li>全选并复制所有源代码（Ctrl+A / Cmd+A，然后 Ctrl+C / Cmd+C）</li>
+                <li>粘贴到下方文本框</li>
+                <li>点击"解析数据"按钮</li>
+            </ol>
+        </div>
+
+        <form method="POST" action="{{ url_for('parse') }}">
+            <div class="mb-4">
+                <label for="html_content" class="block text-sm font-medium text-gray-700 mb-2">
+                    HTML 源码
+                </label>
+                <textarea
+                    id="html_content"
+                    name="html_content"
+                    rows="20"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="粘贴完整的 HTML 源码（右键查看源代码复制）..."></textarea>
+            </div>
+
+            <div class="flex items-center justify-end">
+                <button
+                    type="submit"
+                    class="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                    🔍 解析数据
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
