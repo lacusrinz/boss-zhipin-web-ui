@@ -53,25 +53,25 @@
                         {{ job.education or '-' }}
                     </td>
                     <td class="px-4 py-4 whitespace-nowrap">
-                        {% if job.source == 'boss_zhipin' or job.source == 'web_paste' %}
+                        {% if job.platform == 'boss_zhipin' %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             BOSS直聘
                         </span>
-                        {% elif job.source == '51job' %}
+                        {% elif job.platform == '51job' %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                             前程无忧
                         </span>
-                        {% elif job.source == 'zhaopin' %}
+                        {% elif job.platform == 'zhaopin' %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                             智联招聘
                         </span>
-                        {% elif job.source == 'liepin' %}
+                        {% elif job.platform == 'liepin' %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
                             猎聘
                         </span>
                         {% else %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            {{ job.source or '-' }}
+                            {{ job.platform or '-' }}
                         </span>
                         {% endif %}
                     </td>

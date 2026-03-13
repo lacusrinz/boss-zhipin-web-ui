@@ -81,6 +81,7 @@ class BOSSDatabase:
                     experience TEXT,
                     education TEXT,
                     source TEXT,
+                    platform TEXT,
                     collection_time TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (company_id) REFERENCES companies (id),
@@ -159,8 +160,8 @@ class BOSSDatabase:
         try:
             self.cursor.execute("""
                 INSERT OR IGNORE INTO jobs
-                (company_id, job_name, salary, location, experience, education, source, collection_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (company_id, job_name, salary, location, experience, education, source, platform, collection_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 company_id,
                 job_data.get('job_name', ''),
@@ -169,6 +170,7 @@ class BOSSDatabase:
                 job_data.get('experience', ''),
                 job_data.get('education', ''),
                 job_data.get('source', ''),
+                job_data.get('platform', ''),
                 job_data.get('collection_time', '')
             ))
 
@@ -410,6 +412,31 @@ class BOSSDatabase:
             logging.error(f"添加 is_imported 列失败: {e}")
             return False
 
+    def add_platform_column(self):
+        """
+        为现有的 jobs 表添加 platform 列
+        用于数据库升级
+        """
+        try:
+            # 检查列是否已存在
+            self.cursor.execute("PRAGMA table_info(jobs)")
+            columns = [col[1] for col in self.cursor.fetchall()]
+
+            if 'platform' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE jobs ADD COLUMN platform TEXT
+                """)
+                self.conn.commit()
+                logging.info("已添加 platform 列到 jobs 表")
+                return True
+            else:
+                logging.info("platform 列已存在，无需添加")
+                return True
+
+        except Exception as e:
+            logging.error(f"添加 platform 列失败: {e}")
+            return False
+
     def toggle_company_imported(self, company_id: int) -> Optional[bool]:
         """
         切换企业入库状态
@@ -501,7 +528,7 @@ class BOSSDatabase:
                     c.is_imported,
                     COUNT(j.id) as job_count,
                     GROUP_CONCAT(DISTINCT j.location) as locations,
-                    GROUP_CONCAT(DISTINCT j.source) as sources
+                    GROUP_CONCAT(DISTINCT j.platform) as platforms
                 FROM companies c
                 LEFT JOIN jobs j ON c.id = j.company_id
                 WHERE c.url IS NOT NULL AND c.url != ''
@@ -518,7 +545,7 @@ class BOSSDatabase:
             self.cursor.execute(query)
             rows = self.cursor.fetchall()
 
-            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations', 'sources']
+            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations', 'platforms']
 
             return [dict(zip(columns, row)) for row in rows]
 
@@ -543,7 +570,7 @@ class BOSSDatabase:
                     j.location,
                     j.experience,
                     j.education,
-                    j.source,
+                    j.platform,
                     j.collection_time
                 FROM jobs j
                 JOIN companies c ON j.company_id = c.id
@@ -554,7 +581,7 @@ class BOSSDatabase:
             rows = self.cursor.fetchall()
 
             columns = ['id', 'job_name', 'salary', 'company_name', 'location',
-                      'experience', 'education', 'source', 'collection_time']
+                      'experience', 'education', 'platform', 'collection_time']
 
             return [dict(zip(columns, row)) for row in rows]
 

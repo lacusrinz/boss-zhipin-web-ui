@@ -72,28 +72,28 @@
                             </span>
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap">
-                            {% set source_list = (company.sources or '').split(',') if company.sources else [] %}
-                            {% if source_list and source_list[0] %}
-                                {% for source in source_list %}
-                                {% if source == 'boss_zhipin' or source == 'web_paste' %}
+                            {% set platform_list = (company.platforms or '').split(',') if company.platforms else [] %}
+                            {% if platform_list and platform_list[0] %}
+                                {% for platform in platform_list %}
+                                {% if platform == 'boss_zhipin' %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1">
                                     BOSS直聘
                                 </span>
-                                {% elif source == '51job' %}
+                                {% elif platform == '51job' %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-1">
                                     前程无忧
                                 </span>
-                                {% elif source == 'zhaopin' %}
+                                {% elif platform == 'zhaopin' %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 mr-1">
                                     智联招聘
                                 </span>
-                                {% elif source == 'liepin' %}
+                                {% elif platform == 'liepin' %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-800 mr-1">
                                     猎聘
                                 </span>
                                 {% else %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 mr-1">
-                                    {{ source }}
+                                    {{ platform }}
                                 </span>
                                 {% endif %}
                                 {% endfor %}

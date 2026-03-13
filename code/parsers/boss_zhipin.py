@@ -94,8 +94,13 @@ class BossZhipinParser(BaseParser):
         # 去重
         jobs = self.deduplicate(jobs)
 
-        # 添加来源标识
-        jobs = self.add_source(jobs, source)
+        # 添加平台标识
+        jobs = self.add_platform(jobs, source)
+
+        # source 字段保留为空（用于存储查询关键字）
+        for job in jobs:
+            if 'source' not in job:
+                job['source'] = ''
 
         return jobs
 

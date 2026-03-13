@@ -79,7 +79,8 @@ class BaseParser(ABC):
 
     def add_source(self, jobs: List[Dict], source: str = None) -> List[Dict]:
         """
-        为职位添加来源标识
+        为职位添加来源标识（已弃用，保留兼容性）
+        平台信息现在使用 add_platform 方法
 
         Args:
             jobs: 职位列表
@@ -92,6 +93,27 @@ class BaseParser(ABC):
             source = self.SITE_CODE
 
         for job in jobs:
-            job['source'] = source
+            # source 字段用于存储查询关键字，不存储平台信息
+            if 'source' not in job:
+                job['source'] = ''
+
+        return jobs
+
+    def add_platform(self, jobs: List[Dict], platform: str = None) -> List[Dict]:
+        """
+        为职位添加平台标识
+
+        Args:
+            jobs: 职位列表
+            platform: 平台标识（如果为 None，使用站点代码）
+
+        Returns:
+            添加平台后的职位列表
+        """
+        if platform is None:
+            platform = self.SITE_CODE
+
+        for job in jobs:
+            job['platform'] = platform
 
         return jobs
