@@ -155,7 +155,9 @@ def get_db():
     """获取数据库连接"""
     db = BOSSDatabase(str(DB_PATH))
     if db.connect():
-        # 确保 is_imported 列存在
+        # 先初始化表（如果不存在）
+        db.init_tables()
+        # 再添加 is_imported 列（如果需要升级旧数据库）
         db.add_is_imported_column()
     return db
 
@@ -313,14 +315,13 @@ def main():
     print("=" * 60)
     print("\n启动服务器...")
     print(f"数据库路径: {DB_PATH}")
-    print("\n访问地址: http://localhost:5000")
+    print("\n访问地址: http://localhost:5001")
     print("\n按 Ctrl+C 停止服务器")
     print("=" * 60)
 
     # 确保数据库存在并初始化
     db = get_db()
     if db.conn:
-        db.init_tables()
         db.close()
 
     # 启动 Flask 开发服务器
