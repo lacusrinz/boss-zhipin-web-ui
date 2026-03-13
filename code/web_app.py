@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-BOSS 直聘 Web 管理界面
+多站点职位管理 Web 界面
 Flask Web 应用，提供 HTML 粘贴、岗位展示、企业清单管理功能
+支持多个招聘网站的数据解析
 """
 
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from bs4 import BeautifulSoup
 
 from database import BOSSDatabase
+from parsers import get_parser, get_supported_sites
 
 # 创建 Flask 应用
 app = Flask(__name__)
@@ -30,126 +30,7 @@ else:
 DB_PATH = BASE_DIR / "data" / "boss_jobs.db"
 
 
-# ==================== HTML 解析函数（复用 extract_jobs_v6.py 逻辑）====================
-
-def clean_salary(salary):
-    """清理薪资中的特殊字符，将 BOSS 直聘的数字字体图标转换为正常数字"""
-    if not salary:
-        return ''
-
-    # BOSS 直聘的 Unicode 私有区数字映射 (E031-E03A -> 1-0)
-    digit_map = {
-        '\ue031': '1',
-        '\ue032': '2',
-        '\ue033': '3',
-        '\ue034': '4',
-        '\ue035': '5',
-        '\ue036': '6',
-        '\ue037': '7',
-        '\ue038': '8',
-        '\ue039': '9',
-        '\ue03a': '0',
-    }
-
-    # 替换私有区数字字符
-    for char, digit in digit_map.items():
-        salary = salary.replace(char, digit)
-
-    # 清理其他私有区字符
-    salary = re.sub(r'[\ue000-\uf8ff]', '', salary)
-
-    return salary.strip()
-
-
-def parse_html_content(html: str, source: str = 'web_paste') -> Tuple[List[Dict], List[Dict]]:
-    """
-    解析 HTML 内容，提取职位和企业信息
-
-    Args:
-        html: HTML 源码字符串
-        source: 数据来源标识
-
-    Returns:
-        (jobs, companies): 职位和企业数据列表
-    """
-    soup = BeautifulSoup(html, 'html.parser')
-    jobs = []
-
-    # 查找所有岗位卡片
-    cards = soup.find_all('li', class_='job-card-box')
-
-    if not cards:
-        raise ValueError("未找到岗位卡片，请确认粘贴的是完整的 BOSS 直聘搜索结果页面源码")
-
-    for card in cards:
-        try:
-            # 提取岗位名称
-            job_name_tag = card.find('a', class_='job-name')
-            job_name = job_name_tag.get_text(strip=True) if job_name_tag else ''
-
-            # 提取薪资
-            salary_tag = card.find('span', class_='job-salary')
-            salary = clean_salary(salary_tag.get_text(strip=True) if salary_tag else '')
-
-            # 提取公司名称
-            company_tag = card.find('span', class_='boss-name')
-            company = company_tag.get_text(strip=True) if company_tag else ''
-
-            # 提取公司 URL
-            company_url = ''
-            boss_info_tag = card.find('a', class_='boss-info')
-            if boss_info_tag and boss_info_tag.get('href'):
-                href = boss_info_tag.get('href')
-                if href and not href.startswith('javascript:'):
-                    company_url = f"https://www.zhipin.com{href}"
-
-            # 提取地点
-            location_tag = card.find('span', class_='company-location')
-            location = location_tag.get_text(strip=True) if location_tag else ''
-
-            # 提取经验和学历
-            tags = card.find_all('li')
-            experience = ''
-            education = ''
-
-            for tag in tags:
-                text = tag.get_text(strip=True)
-                if not text:
-                    continue
-
-                if any(keyword in text for keyword in ['经验', '年', '不限', '应届', '在校']):
-                    experience = text
-                elif any(keyword in text for keyword in ['学历', '本科', '大专', '硕士', '博士']):
-                    education = text
-
-            if job_name:
-                job = {
-                    'job_name': job_name,
-                    'salary': salary,
-                    'company': company,
-                    'company_url': company_url,
-                    'location': location,
-                    'experience': experience,
-                    'education': education,
-                    'source': source
-                }
-                jobs.append(job)
-
-        except Exception as e:
-            print(f"处理岗位卡片时出错: {e}")
-            continue
-
-    # 去重
-    seen = set()
-    unique_jobs = []
-    for job in jobs:
-        key = f"{job.get('job_name')}_{job.get('company')}"
-        if key not in seen and job.get('job_name'):
-            seen.add(key)
-            unique_jobs.append(job)
-
-    return unique_jobs
-
+# ==================== 数据库连接 ====================
 
 def get_db():
     """获取数据库连接"""
@@ -167,21 +48,27 @@ def get_db():
 @app.route('/')
 def index():
     """首页：HTML 粘贴页面"""
-    return render_template('paste.html')
+    supported_sites = get_supported_sites()
+    enabled_sites = [s for s in supported_sites if s.get('enabled', False)]
+    return render_template('paste.html', sites=enabled_sites)
 
 
 @app.route('/parse', methods=['POST'])
 def parse():
     """解析 HTML 内容"""
     html = request.form.get('html_content', '').strip()
+    site_code = request.form.get('site_code', 'boss_zhipin')
 
     if not html:
         flash('请粘贴 HTML 内容', 'error')
         return redirect(url_for('index'))
 
     try:
+        # 获取对应站点的解析器
+        parser = get_parser(site_code)
+
         # 解析 HTML
-        jobs = parse_html_content(html, source='web_paste')
+        jobs = parser.parse(html, source='web_paste')
 
         if not jobs:
             flash('未找到职位信息，请检查粘贴的内容是否正确', 'error')
@@ -193,9 +80,6 @@ def parse():
             flash('数据库连接失败', 'error')
             return redirect(url_for('index'))
 
-        # 初始化表（如果不存在）
-        db.init_tables()
-
         # 添加采集时间
         collection_time = datetime.now().strftime('%Y-%m-%d %H:%M')
         for job in jobs:
@@ -205,7 +89,8 @@ def parse():
         company_count, job_count = db.insert_jobs_batch(jobs)
         db.close()
 
-        flash(f'成功解析 {job_count} 个职位，来自 {company_count} 家企业', 'success')
+        site_name = parser.SITE_NAME
+        flash(f'成功从 {site_name} 解析 {job_count} 个职位，来自 {company_count} 家企业', 'success')
         return redirect(url_for('jobs_list'))
 
     except ValueError as e:

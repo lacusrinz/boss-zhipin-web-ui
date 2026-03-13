@@ -17,6 +17,8 @@ a = Analysis(
     datas=[
         # 包含模板文件
         ('templates', 'templates'),
+        # 包含解析器模块
+        ('parsers', 'parsers'),
     ],
     hiddenimports=[
         'bs4',
