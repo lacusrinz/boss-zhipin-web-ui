@@ -500,7 +500,8 @@ class BOSSDatabase:
                     c.url,
                     c.is_imported,
                     COUNT(j.id) as job_count,
-                    GROUP_CONCAT(DISTINCT j.location) as locations
+                    GROUP_CONCAT(DISTINCT j.location) as locations,
+                    GROUP_CONCAT(DISTINCT j.source) as sources
                 FROM companies c
                 LEFT JOIN jobs j ON c.id = j.company_id
                 WHERE c.url IS NOT NULL AND c.url != ''
@@ -517,7 +518,7 @@ class BOSSDatabase:
             self.cursor.execute(query)
             rows = self.cursor.fetchall()
 
-            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations']
+            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations', 'sources']
 
             return [dict(zip(columns, row)) for row in rows]
 
