@@ -5,21 +5,18 @@ PyInstaller 规范文件
 用于将 BOSS 直聘 Web 管理界面打包为 Windows exe 文件
 """
 
+import os
 import sys
-from pathlib import Path
-
-# 获取当前目录（spec 文件所在目录）
-base_dir = Path(__file__).parent
 
 block_cipher = None
 
 a = Analysis(
     ['web_app.py'],
-    pathex=[str(base_dir)],
+    pathex=[],
     binaries=[],
     datas=[
-        # 包含模板文件（相对于 spec 文件所在目录）
-        (str(base_dir / 'templates'), 'templates'),
+        # 包含模板文件
+        ('templates', 'templates'),
     ],
     hiddenimports=[
         'bs4',
