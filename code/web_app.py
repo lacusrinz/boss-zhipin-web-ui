@@ -19,6 +19,9 @@ from parsers import get_parser, get_supported_sites
 app = Flask(__name__)
 app.secret_key = 'boss-zhipin-web-ui-dev-key-2026'
 
+# 设置最大请求内容长度为 50MB（用于处理大 HTML 文件）
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
 # 获取基础目录（支持开发环境和打包后的 exe 环境）
 if getattr(sys, 'frozen', False):
     # 打包后的 exe 环境
@@ -199,6 +202,13 @@ def batch_import():
 
 
 # ==================== 错误处理 ====================
+
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    """413 错误 - 请求内容过大"""
+    flash('粘贴的 HTML 内容太大，请减小文件大小或联系管理员增加限制', 'error')
+    return redirect(url_for('index'))
+
 
 @app.errorhandler(404)
 def not_found(e):
