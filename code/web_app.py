@@ -153,6 +153,27 @@ def toggle_company():
     return jsonify({'success': True, 'is_imported': new_status})
 
 
+@app.route('/companies/toggle-discard', methods=['POST'])
+def toggle_company_discarded():
+    """切换企业废弃状态"""
+    company_id = request.json.get('company_id')
+
+    if not company_id:
+        return jsonify({'success': False, 'error': '缺少企业 ID'})
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    new_status = db.toggle_company_discarded(company_id)
+    db.close()
+
+    if new_status is None:
+        return jsonify({'success': False, 'error': '更新失败'})
+
+    return jsonify({'success': True, 'is_discarded': new_status})
+
+
 @app.route('/companies/batch-import', methods=['POST'])
 def batch_import():
     """批量标记企业为已入库"""
