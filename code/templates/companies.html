@@ -129,7 +129,17 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap">
-                            <!-- 操作列预留，未来可添加编辑、删除等按钮 -->
+                            {% if company.is_discarded %}
+                            <button class="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                                    onclick="toggleDiscardStatus({{ company.id }})">
+                                ↩️ 恢复
+                            </button>
+                            {% else %}
+                            <button class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                                    onclick="toggleDiscardStatus({{ company.id }})">
+                                🗑️ 废弃
+                            </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
