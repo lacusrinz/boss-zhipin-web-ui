@@ -499,6 +499,57 @@ class BOSSDatabase:
             logging.error(f"切换企业入库状态失败: {e}")
             return None
 
+    def toggle_company_discarded(self, company_id: int) -> Optional[bool]:
+        """
+        切换企业废弃状态
+
+        未废弃 → 已废弃（同时取消已入库状态）
+        已废弃 → 未废弃（恢复为未入库状态）
+
+        Args:
+            company_id: 企业 ID
+
+        Returns:
+            bool: 新的废弃状态，失败返回 None
+        """
+        try:
+            # 获取当前状态
+            self.cursor.execute("""
+                SELECT is_discarded, is_imported FROM companies WHERE id = ?
+            """, (company_id,))
+
+            result = self.cursor.fetchone()
+            if result is None:
+                logging.warning(f"企业 ID {company_id} 不存在")
+                return None
+
+            current_discarded = result[0]
+            current_imported = result[1]
+
+            if current_discarded:
+                # 当前已废弃 → 恢复为未废弃
+                new_discarded = 0
+                new_imported = 0  # 恢复为未入库状态
+            else:
+                # 当前未废弃 → 标记为已废弃
+                new_discarded = 1
+                new_imported = 0  # 取消已入库状态
+
+            # 更新状态
+            self.cursor.execute("""
+                UPDATE companies
+                SET is_discarded = ?, is_imported = ?
+                WHERE id = ?
+            """, (new_discarded, new_imported, company_id))
+
+            self.conn.commit()
+            logging.info(f"企业 ID {company_id} 废弃状态已切换为 {new_discarded}")
+            return bool(new_discarded)
+
+        except Exception as e:
+            logging.error(f"切换企业废弃状态失败: {e}")
+            return None
+
     def batch_import_companies(self, company_ids: List[int]) -> int:
         """
         批量标记企业为已入库
@@ -551,6 +602,7 @@ class BOSSDatabase:
                     c.name,
                     c.url,
                     c.is_imported,
+                    c.is_discarded,
                     COUNT(j.id) as job_count,
                     GROUP_CONCAT(DISTINCT j.location) as locations,
                     GROUP_CONCAT(DISTINCT j.platform) as platforms
@@ -561,16 +613,20 @@ class BOSSDatabase:
 
             # 添加筛选条件
             if filter_type == 'imported':
-                query += " AND c.is_imported = 1"
+                query += " AND c.is_imported = 1 AND c.is_discarded = 0"
             elif filter_type == 'unimported':
-                query += " AND c.is_imported = 0"
+                query += " AND c.is_imported = 0 AND c.is_discarded = 0"
+            elif filter_type == 'discarded':
+                query += " AND c.is_discarded = 1"
+            elif filter_type == 'undiscarded':
+                query += " AND c.is_discarded = 0"
 
-            query += " GROUP BY c.id, c.name, c.url, c.is_imported ORDER BY c.id DESC"
+            query += " GROUP BY c.id, c.name, c.url, c.is_imported, c.is_discarded ORDER BY c.id DESC"
 
             self.cursor.execute(query)
             rows = self.cursor.fetchall()
 
-            columns = ['id', 'name', 'url', 'is_imported', 'job_count', 'locations', 'platforms']
+            columns = ['id', 'name', 'url', 'is_imported', 'is_discarded', 'job_count', 'locations', 'platforms']
 
             return [dict(zip(columns, row)) for row in rows]
 
