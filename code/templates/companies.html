@@ -52,13 +52,14 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">招聘职位数</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">来源平台</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">入库状态</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for company in companies %}
-                    <tr class="hover:bg-gray-50 transition-colors">
+                    <tr class="{% if company.is_discarded %}bg-red-50 hover:bg-red-100{% else %}hover:bg-gray-50{% endif %} transition-colors">
                         <td class="px-4 py-4 whitespace-nowrap">
-                            {% if not company.is_imported %}
+                            {% if not company.is_imported and not company.is_discarded %}
                             <input type="checkbox" name="company_ids" value="{{ company.id }}"
                                    class="company-checkbox form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
                                    onchange="updateBatchButton()">
@@ -108,7 +109,12 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap">
-                            {% if company.is_imported %}
+                            {% if company.is_discarded %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
+                                  id="status-{{ company.id }}">
+                                🗑️ 已废弃
+                            </span>
+                            {% elif company.is_imported %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
                                   onclick="toggleImportStatus({{ company.id }})"
                                   id="status-{{ company.id }}">
@@ -121,6 +127,9 @@
                                 ❌ 未入库
                             </span>
                             {% endif %}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            <!-- 操作列预留，未来可添加编辑、删除等按钮 -->
                         </td>
                     </tr>
                     {% endfor %}
