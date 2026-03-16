@@ -437,6 +437,31 @@ class BOSSDatabase:
             logging.error(f"添加 platform 列失败: {e}")
             return False
 
+    def add_discarded_column(self):
+        """
+        为现有的 companies 表添加 is_discarded 列
+        用于数据库升级
+        """
+        try:
+            # 检查列是否已存在
+            self.cursor.execute("PRAGMA table_info(companies)")
+            columns = [col[1] for col in self.cursor.fetchall()]
+
+            if 'is_discarded' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE companies ADD COLUMN is_discarded BOOLEAN DEFAULT 0
+                """)
+                self.conn.commit()
+                logging.info("已添加 is_discarded 列到 companies 表")
+                return True
+            else:
+                logging.info("is_discarded 列已存在，无需添加")
+                return True
+
+        except Exception as e:
+            logging.error(f"添加 is_discarded 列失败: {e}")
+            return False
+
     def toggle_company_imported(self, company_id: int) -> Optional[bool]:
         """
         切换企业入库状态
