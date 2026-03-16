@@ -28,6 +28,12 @@
                        class="form-radio h-4 w-4 text-blue-600 focus:ring-blue-500">
                 <span class="ml-2 text-sm text-gray-700">仅已入库</span>
             </label>
+            <label class="inline-flex items-center">
+                <input type="radio" name="filter" value="discarded" {% if filter == 'discarded' %}checked{% endif %}
+                       onchange="window.location.href='{{ url_for('companies_list') }}?filter=discarded'"
+                       class="form-radio h-4 w-4 text-blue-600 focus:ring-blue-500">
+                <span class="ml-2 text-sm text-gray-700">仅已废弃</span>
+            </label>
         </div>
     </div>
 
