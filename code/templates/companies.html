@@ -219,6 +219,30 @@ function toggleImportStatus(companyId) {
     });
 }
 
+// 切换企业废弃状态
+function toggleDiscardStatus(companyId) {
+    fetch('/companies/toggle-discard', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ company_id: companyId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 重新加载页面以更新状态
+            window.location.reload();
+        } else {
+            showToast(data.error || '操作失败', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('操作失败', 'error');
+    });
+}
+
 // 显示 Toast 提示
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
