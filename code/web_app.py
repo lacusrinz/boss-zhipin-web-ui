@@ -253,6 +253,339 @@ def batch_import():
     return jsonify({'success': True, 'count': count})
 
 
+# ==================== Monitoring API Endpoints ====================
+
+@app.route('/api/monitoring/token', methods=['GET'])
+def get_token_config():
+    """Get RiskBird token configuration (masked)"""
+    from token_service import TokenService
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    configs = db.get_all_riskbird_configs()
+    db.close()
+
+    # Mask token for display
+    token_service = TokenService()
+    masked_configs = {}
+    for key, value in configs.items():
+        if key == 'token':
+            masked_configs[key] = token_service.mask_token(value)
+        else:
+            masked_configs[key] = value
+
+    return jsonify({'success': True, 'configs': masked_configs})
+
+
+@app.route('/api/monitoring/token', methods=['POST'])
+def save_token_config():
+    """Save RiskBird token configuration"""
+    from token_service import TokenService
+
+    data = request.json
+    token = data.get('token', '').strip()
+    app_uuid = data.get('app_uuid', '').strip()
+    userinfo = data.get('userinfo', '').strip()
+
+    if not token or not app_uuid:
+        return jsonify({'success': False, 'error': 'Token和App UUID不能为空'})
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    # Encrypt and save token
+    token_service = TokenService()
+
+    if token:
+        encrypted_token = token_service.encrypt(token)
+        db.insert_riskbird_config('token', encrypted_token)
+
+    if app_uuid:
+        db.insert_riskbird_config('app_uuid', app_uuid)
+
+    if userinfo:
+        db.insert_riskbird_config('userinfo', userinfo)
+
+    db.close()
+
+    return jsonify({'success': True, 'message': '配置已保存'})
+
+
+@app.route('/api/monitoring/token/test', methods=['POST'])
+def test_token_connection():
+    """Test RiskBird token connection"""
+    from token_service import TokenService
+    from riskbird_search import build_search_params, call_riskbird_search_api
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    encrypted_token = db.get_riskbird_config('token')
+    app_uuid = db.get_riskbird_config('app_uuid')
+
+    if not encrypted_token or not app_uuid:
+        db.close()
+        return jsonify({'success': False, 'error': '请先配置Token'})
+
+    # Decrypt token
+    token_service = TokenService()
+    try:
+        token = token_service.decrypt(encrypted_token)
+    except Exception as e:
+        db.close()
+        return jsonify({'success': False, 'error': f'Token解密失败: {str(e)}'})
+
+    db.close()
+
+    # Test API call with minimal params
+    test_params = build_search_params(
+        regionid='110000',
+        esdate='2026-03-17￥2026-03-17'
+    )
+
+    response = call_riskbird_search_api(token, app_uuid, test_params)
+
+    if 'error' in response:
+        if response['error'] == 'unauthorized':
+            return jsonify({'success': False, 'error': 'Token无效或已过期'})
+        else:
+            return jsonify({'success': False, 'error': f'API调用失败: {response.get("message")}'})
+
+    return jsonify({'success': True, 'message': '连接测试成功'})
+
+
+@app.route('/api/monitoring/configs', methods=['GET'])
+def get_monitoring_configs():
+    """Get all monitoring configurations"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    configs = db.get_all_monitoring_configs()
+    db.close()
+
+    return jsonify({'success': True, 'configs': configs})
+
+
+@app.route('/api/monitoring/configs', methods=['POST'])
+def create_monitoring_config():
+    """Create a new monitoring configuration"""
+    data = request.json
+    config_name = data.get('config_name', '').strip()
+    region_codes = data.get('region_codes', [])
+    interval_minutes = data.get('interval_minutes', 5)
+    reg_cap = data.get('reg_cap', '').strip()
+
+    if not config_name:
+        return jsonify({'success': False, 'error': '配置名称不能为空'})
+
+    if not region_codes:
+        return jsonify({'success': False, 'error': '请至少选择一个地区'})
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    # Convert region list to JSON string
+    import json
+    region_codes_json = json.dumps(region_codes)
+
+    config_id = db.insert_monitoring_config(
+        config_name=config_name,
+        region_codes=region_codes_json,
+        interval_minutes=interval_minutes,
+        reg_cap=reg_cap if reg_cap else None
+    )
+
+    if config_id:
+        # Add job to scheduler
+        add_monitoring_job(config_id, interval_minutes)
+
+        db.close()
+        return jsonify({'success': True, 'config_id': config_id})
+    else:
+        db.close()
+        return jsonify({'success': False, 'error': '创建配置失败'})
+
+
+@app.route('/api/monitoring/configs/<int:config_id>', methods=['PUT'])
+def update_monitoring_config(config_id):
+    """Update monitoring configuration"""
+    data = request.json
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    # Build update dict
+    updates = {}
+    if 'config_name' in data:
+        updates['config_name'] = data['config_name']
+    if 'region_codes' in data:
+        import json
+        updates['region_codes'] = json.dumps(data['region_codes'])
+    if 'interval_minutes' in data:
+        updates['interval_minutes'] = data['interval_minutes']
+    if 'reg_cap' in data:
+        updates['reg_cap'] = data['reg_cap']
+
+    success = db.update_monitoring_config(config_id, **updates)
+
+    if success and 'interval_minutes' in updates:
+        # Update job schedule
+        remove_monitoring_job(config_id)
+        add_monitoring_job(config_id, updates['interval_minutes'])
+
+    db.close()
+
+    if success:
+        return jsonify({'success': True, 'message': '配置已更新'})
+    else:
+        return jsonify({'success': False, 'error': '更新配置失败'})
+
+
+@app.route('/api/monitoring/configs/<int:config_id>', methods=['DELETE'])
+def delete_monitoring_config(config_id):
+    """Delete monitoring configuration"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    # Remove from scheduler
+    remove_monitoring_job(config_id)
+
+    # Delete from database
+    success = db.delete_monitoring_config(config_id)
+    db.close()
+
+    if success:
+        return jsonify({'success': True, 'message': '配置已删除'})
+    else:
+        return jsonify({'success': False, 'error': '删除配置失败'})
+
+
+@app.route('/api/monitoring/jobs', methods=['GET'])
+def get_monitoring_jobs():
+    """Get all monitoring jobs status"""
+    jobs = scheduler.get_jobs()
+
+    job_list = []
+    for job in jobs:
+        if job.id.startswith('monitoring_'):
+            config_id = int(job.id.split('_')[1])
+            job_list.append({
+                'id': job.id,
+                'config_id': config_id,
+                'name': job.name,
+                'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
+                'paused': not job.next_run_time
+            })
+
+    return jsonify({'success': True, 'jobs': job_list})
+
+
+@app.route('/api/monitoring/jobs/<int:config_id>/toggle', methods=['POST'])
+def toggle_monitoring_job(config_id):
+    """Toggle monitoring job (pause/resume)"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    config = db.get_monitoring_config(config_id)
+    db.close()
+
+    if not config:
+        return jsonify({'success': False, 'error': '配置不存在'})
+
+    # Check if job is paused
+    job_id = f'monitoring_{config_id}'
+    job = scheduler.get_job(job_id)
+
+    if job:
+        # Job exists, toggle it
+        if hasattr(job.trigger, 'trigger'):
+            # Already paused
+            if resume_monitoring_job(config_id):
+                return jsonify({'success': True, 'paused': False})
+        else:
+            # Running, pause it
+            if pause_monitoring_job(config_id):
+                return jsonify({'success': True, 'paused': True})
+    else:
+        return jsonify({'success': False, 'error': '任务不存在'})
+
+    return jsonify({'success': False, 'error': '操作失败'})
+
+
+@app.route('/api/monitoring/jobs/<int:config_id>/run-now', methods=['POST'])
+def run_monitoring_job_now_endpoint(config_id):
+    """Run monitoring job immediately"""
+    success = run_monitoring_job_now(config_id)
+
+    if success:
+        return jsonify({'success': True, 'message': '任务已启动'})
+    else:
+        return jsonify({'success': False, 'error': '启动任务失败'})
+
+
+@app.route('/api/monitoring/companies', methods=['GET'])
+def get_monitored_companies():
+    """Get monitored companies with pagination"""
+    config_id = request.args.get('config_id', type=int)
+    limit = request.args.get('limit', 50, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    companies = db.get_monitored_companies(
+        config_id=config_id,
+        limit=limit,
+        offset=offset
+    )
+
+    # Get total count
+    if config_id:
+        db.cursor.execute("SELECT COUNT(*) FROM monitored_companies WHERE config_id = ?", (config_id,))
+    else:
+        db.cursor.execute("SELECT COUNT(*) FROM monitored_companies")
+    total = db.cursor.fetchone()[0]
+
+    db.close()
+
+    return jsonify({
+        'success': True,
+        'companies': companies,
+        'total': total,
+        'limit': limit,
+        'offset': offset
+    })
+
+
+@app.route('/api/monitoring/stats', methods=['GET'])
+def get_monitoring_stats():
+    """Get monitoring statistics"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    stats = db.get_monitoring_stats()
+    db.close()
+
+    return jsonify({'success': True, 'stats': stats})
+
+
+@app.route('/monitoring')
+def monitoring_page():
+    """Monitoring management page"""
+    return render_template('monitoring.html')
+
+
 # ==================== 错误处理 ====================
 
 @app.errorhandler(413)
