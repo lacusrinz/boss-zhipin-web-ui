@@ -68,6 +68,15 @@ def setup_scheduler():
         timezone='Asia/Shanghai'
     )
 
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
+
     return scheduler
 
 # Initialize scheduler
@@ -309,6 +318,8 @@ def add_monitoring_job(config_id: int, interval_minutes: int):
         config_id: Monitoring configuration ID
         interval_minutes: Interval in minutes
     """
+    # Deferred import to avoid circular dependency with riskbird_monitor module
+    # which imports from database and riskbird_search
     from riskbird_monitor import RiskBirdMonitor
 
     job_id = f'monitoring_{config_id}'
