@@ -285,6 +285,9 @@ def save_token_config():
     from token_service import TokenService
 
     data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
+
     token = data.get('token', '').strip()
     app_uuid = data.get('app_uuid', '').strip()
     userinfo = data.get('userinfo', '').strip()
@@ -341,10 +344,11 @@ def test_token_connection():
 
     db.close()
 
-    # Test API call with minimal params
+    # Test API call with minimal params - use dynamic date
+    today = datetime.now().strftime('%Y-%m-%d')
     test_params = build_search_params(
         regionid='110000',
-        esdate='2026-03-17￥2026-03-17'
+        esdate=f'{today}￥{today}'
     )
 
     response = call_riskbird_search_api(token, app_uuid, test_params)
@@ -375,6 +379,9 @@ def get_monitoring_configs():
 def create_monitoring_config():
     """Create a new monitoring configuration"""
     data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
+
     config_name = data.get('config_name', '').strip()
     region_codes = data.get('region_codes', [])
     interval_minutes = data.get('interval_minutes', 5)
@@ -383,8 +390,11 @@ def create_monitoring_config():
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'})
 
-    if not region_codes:
-        return jsonify({'success': False, 'error': '请至少选择一个地区'})
+    if not isinstance(region_codes, list) or not region_codes:
+        return jsonify({'success': False, 'error': '地区代码必须是非空数组'}), 400
+
+    if not isinstance(interval_minutes, int) or not (1 <= interval_minutes <= 1440):
+        return jsonify({'success': False, 'error': '监控间隔必须在1-1440分钟之间'}), 400
 
     db = get_db()
     if not db.conn:
@@ -416,6 +426,8 @@ def create_monitoring_config():
 def update_monitoring_config(config_id):
     """Update monitoring configuration"""
     data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
 
     db = get_db()
     if not db.conn:
@@ -506,9 +518,9 @@ def toggle_monitoring_job(config_id):
     job = scheduler.get_job(job_id)
 
     if job:
-        # Job exists, toggle it
-        if hasattr(job.trigger, 'trigger'):
-            # Already paused
+        # Check next_run_time to determine if job is paused
+        if job.next_run_time is None:
+            # Already paused, resume it
             if resume_monitoring_job(config_id):
                 return jsonify({'success': True, 'paused': False})
         else:
