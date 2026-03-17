@@ -28,8 +28,7 @@ htmlcov/
 .tox/
 .hypothesis/
 
-# 数据库文件
-data/boss_jobs.db
+# 数据库文件（仅忽略备份和临时文件）
 data/boss_jobs.db-*
 data/boss_jobs.db_*
 data/*.db-journal
