@@ -155,48 +155,72 @@ class RiskBirdMonitor:
                 result['error'] = 'API credentials not configured'
                 return result
 
-            # Build search params
-            search_params = self.build_search_params_from_config(config)
-
-            # Log the search params for debugging
-            import json
+            # Parse region codes
             region_codes_value = config.get('region_codes', '[]')
             if isinstance(region_codes_value, list):
-                regions = region_codes_value
+                region_codes = region_codes_value
             else:
-                import json as json_mod
-                regions = json_mod.loads(region_codes_value)
-            regions_str = ','.join(regions) if regions else ''
+                region_codes = json.loads(region_codes_value)
 
-            self.logger.info(f"Querying RiskBird API: regions={regions_str}, "
-                           f"capital={config.get('reg_cap', '')}, "
-                           f"date={config.get('es_date', 'N/A')}")
+            # API can only handle 5 regions at a time - split into batches
+            MAX_REGIONS_PER_REQUEST = 5
+            region_batches = []
 
-            # Call API
-            api_response = self.call_riskbird_api(token, app_uuid, search_params)
+            for i in range(0, len(region_codes), MAX_REGIONS_PER_REQUEST):
+                batch = region_codes[i:i + MAX_REGIONS_PER_REQUEST]
+                region_batches.append(batch)
 
-            if 'error' in api_response:
-                if api_response['error'] == 'unauthorized':
-                    result['error'] = 'Token expired or invalid'
-                elif api_response['error'] == 'request_failed':
-                    result['error'] = f'Network request failed: {api_response.get("message", "")}'
-                elif api_response['error'] == 'api_error':
-                    status_code = api_response.get('status_code', 'Unknown')
-                    message = api_response.get('message', '')
-                    result['error'] = f'API error (HTTP {status_code}): {message}'
-                else:
-                    result['error'] = api_response.get('message', 'API call failed')
-                # Don't return here - let it fall through to record the error
+            self.logger.info(f"Querying RiskBird API: {len(region_codes)} regions in {len(region_batches)} batch(es)")
+
+            # Process each batch
+            all_companies = []
+            batch_errors = []
+
+            for batch_idx, batch_regions in enumerate(region_batches, 1):
+                regions_str = ','.join(batch_regions)
+                self.logger.info(f"Batch {batch_idx}/{len(region_batches)}: regions={regions_str}")
+
+                # Build search params for this batch
+                today = datetime.now().strftime('%Y-%m-%d')
+                es_date = f'{today}￥{today}'
+                reg_cap = config.get('reg_cap', '')
+
+                search_params = build_search_params(
+                    regionid=regions_str,
+                    regcap=reg_cap,
+                    esdate=es_date
+                )
+
+                # Call API for this batch
+                api_response = self.call_riskbird_api(token, app_uuid, search_params)
+
+                if 'error' in api_response:
+                    error_msg = f"Batch {batch_idx} failed: {api_response.get('message', 'Unknown error')}"
+                    batch_errors.append(error_msg)
+                    self.logger.error(error_msg)
+                    # Continue with next batch instead of failing completely
+                    continue
+
+                # Parse companies from this batch
+                companies = self.parse_companies_from_response(api_response)
+                all_companies.extend(companies)
+
+                self.logger.info(f"Batch {batch_idx} completed: {len(companies)} companies found")
+
+            # Check if all batches failed
+            if len(batch_errors) == len(region_batches):
+                result['error'] = f"All {len(region_batches)} batch(es) failed: {'; '.join(batch_errors)}"
                 return result
 
-            # Parse companies
-            companies = self.parse_companies_from_response(api_response)
+            # Log partial errors if any
+            if batch_errors:
+                self.logger.warning(f"Some batches failed: {'; '.join(batch_errors)}")
 
-            # Save to database
+            # Save all companies to database
             added = 0
             skipped = 0
 
-            for company in companies:
+            for company in all_companies:
                 company['config_id'] = config_id
                 company_id = self.db.insert_monitored_company(company)
 
