@@ -72,7 +72,7 @@ class RiskBirdMonitor:
         """
         return call_riskbird_search_api(token, app_uuid, search_params)
 
-    def parse_companies_from_response(self, response: dict) -> List[Dict]:
+    def parse_companies_from_response(self, response: dict) -> tuple[List[Dict], int]:
         """
         Parse companies from RiskBird API response
 
@@ -80,19 +80,22 @@ class RiskBirdMonitor:
             response: API response dict
 
         Returns:
-            list: Parsed company data
+            tuple: (list of parsed company data, total record count)
         """
         companies = []
 
         if 'error' in response:
             self.logger.error(f"API error: {response.get('message')}")
-            return companies
+            return companies, 0
 
         data = response.get('data', [])
 
         if not isinstance(data, list):
             # Some API responses might have different structure
-            data = data.get('aaData', []) if isinstance(data, dict) else []
+            total_records = data.get('iTotalRecords', 0)
+            data = data.get('aaData', [])
+        else:
+            total_records = len(data)
 
         for item in data:
             try:
@@ -112,7 +115,7 @@ class RiskBirdMonitor:
                 self.logger.warning(f"Failed to parse company: {e}")
                 continue
 
-        return companies
+        return companies, total_records
 
     def _extract_region_code(self, company_data: dict) -> str:
         """Extract region code from company data"""
@@ -202,31 +205,51 @@ class RiskBirdMonitor:
                 es_date = f'{today}￥{today}'
                 reg_cap = config.get('reg_cap', '')
 
-                search_params = build_search_params(
-                    regionid=regions_str,
-                    regcap=reg_cap,
-                    esdate=es_date,
-                    status='1'
-                )
+                # Pagination settings
+                PAGE_SIZE = 10
+                page_start = 0
+                batch_total_companies = 0
+                batch_has_more = True
 
-                # Debug: log the search params
-                self.logger.info(f"Search params for batch {batch_idx}: {str(search_params)[:200]}...")
+                # Fetch all pages for this batch
+                while batch_has_more:
+                    search_params = build_search_params(
+                        regionid=regions_str,
+                        regcap=reg_cap,
+                        esdate=es_date,
+                        status='1',
+                        page_start=page_start,
+                        page_length=PAGE_SIZE
+                    )
 
-                # Call API for this batch
-                api_response = self.call_riskbird_api(token, app_uuid, search_params)
+                    # Debug: log the search params
+                    self.logger.info(f"Fetching page {page_start // PAGE_SIZE + 1} (start={page_start}) for batch {batch_idx}")
 
-                if 'error' in api_response:
-                    error_msg = f"Batch {batch_idx} failed: {api_response.get('message', 'Unknown error')}"
-                    batch_errors.append(error_msg)
-                    self.logger.error(error_msg)
-                    # Continue with next batch instead of failing completely
-                    continue
+                    # Call API for this batch/page
+                    api_response = self.call_riskbird_api(token, app_uuid, search_params)
 
-                # Parse companies from this batch
-                companies = self.parse_companies_from_response(api_response)
-                all_companies.extend(companies)
+                    if 'error' in api_response:
+                        error_msg = f"Batch {batch_idx} (page {page_start // PAGE_SIZE + 1}) failed: {api_response.get('message', 'Unknown error')}"
+                        batch_errors.append(error_msg)
+                        self.logger.error(error_msg)
+                        # Stop pagination for this batch and continue with next batch
+                        break
 
-                self.logger.info(f"Batch {batch_idx} completed: {len(companies)} companies found")
+                    # Parse companies from this page
+                    companies, total_records = self.parse_companies_from_response(api_response)
+                    all_companies.extend(companies)
+                    batch_total_companies += len(companies)
+
+                    self.logger.info(f"Page {page_start // PAGE_SIZE + 1}: {len(companies)} companies (total so far: {batch_total_companies}, total available: {total_records})")
+
+                    # Check if we need to fetch more pages
+                    if batch_total_companies >= total_records or len(companies) < PAGE_SIZE:
+                        batch_has_more = False
+                        self.logger.info(f"Batch {batch_idx} pagination complete: {batch_total_companies}/{total_records} companies fetched")
+                    else:
+                        # Add small delay between pages to avoid rate limiting
+                        time.sleep(0.5)
+                        page_start += PAGE_SIZE
 
             # Check if all batches failed
             if len(batch_errors) == len(region_batches):
