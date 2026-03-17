@@ -162,8 +162,8 @@ class RiskBirdMonitor:
             else:
                 region_codes = json.loads(region_codes_value)
 
-            # API can only handle 5 regions at a time - split into batches
-            MAX_REGIONS_PER_REQUEST = 5
+            # API can only handle 1 region at a time for stability - split into batches
+            MAX_REGIONS_PER_REQUEST = 1
             region_batches = []
 
             for i in range(0, len(region_codes), MAX_REGIONS_PER_REQUEST):
