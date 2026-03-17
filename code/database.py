@@ -855,15 +855,21 @@ class BOSSDatabase:
             int: Config ID or None
         """
         try:
+            # Check connection before insert
+            if not self.conn or not self.cursor:
+                logging.error("Database connection is not established")
+                return None
+
             self.cursor.execute("""
                 INSERT INTO monitoring_configs
                 (config_name, region_codes, interval_minutes, reg_cap)
                 VALUES (?, ?, ?, ?)
             """, (config_name, region_codes, interval_minutes, reg_cap))
             self.conn.commit()
+
             return self.cursor.lastrowid
         except Exception as e:
-            logging.error(f"Failed to insert monitoring config: {e}")
+            logging.error(f"Failed to insert monitoring config: {e}", exc_info=True)
             return None
 
     def get_all_monitoring_configs(self) -> List[Dict]:
@@ -962,17 +968,23 @@ class BOSSDatabase:
             bool: Success status
         """
         try:
+            # Check if config exists
+            self.cursor.execute("SELECT id FROM monitoring_configs WHERE id = ?", (config_id,))
+            if not self.cursor.fetchone():
+                logging.warning(f"Config {config_id} does not exist, already deleted")
+                return True  # Already deleted is considered success
+
             # Delete in correct order due to foreign key constraints:
             # 1. monitoring_runs (execution history)
             # 2. monitored_companies (company data)
             # 3. monitoring_configs (configuration)
 
             self.cursor.execute("DELETE FROM monitoring_runs WHERE config_id = ?", (config_id,))
-            self.cursor.execute("DELETE FROM monitored_companies WHERE config_id = ?", (config_id,))
-            self.cursor.execute("DELETE FROM monitoring_configs WHERE id = ?", (config_id,))
+            rows_companies = self.cursor.execute("DELETE FROM monitored_companies WHERE config_id = ?", (config_id,))
+            rows_configs = self.cursor.execute("DELETE FROM monitoring_configs WHERE id = ?", (config_id,))
 
             self.conn.commit()
-            logging.info(f"Deleted monitoring config {config_id} and all associated data")
+            logging.info(f"Deleted monitoring config {config_id} and all associated data ({rows_companies} companies, {rows_configs} configs)")
             return True
         except Exception as e:
             logging.error(f"Failed to delete monitoring config: {e}")

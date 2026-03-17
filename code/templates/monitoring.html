@@ -3,91 +3,298 @@
 {% block title %}企业监测 - BOSS直聘管理{% endblock %}
 
 {% block content %}
+<style>
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #000;
+}
+</style>
+
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-3xl font-bold mb-8">企业监测管理</h1>
 
-    <!-- Token Configuration Card -->
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4">RiskBird API 配置</h2>
+    <!-- Action Buttons -->
+    <div class="flex space-x-4 mb-6">
+        <button onclick="openTokenModal()"
+                class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center space-x-2">
+            <span>🔑</span>
+            <span>配置 RiskBird API</span>
+        </button>
+        <button onclick="openConfigModal()"
+                class="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 flex items-center space-x-2">
+            <span>➕</span>
+            <span>创建监测配置</span>
+        </button>
+    </div>
 
-        <form id="token-form" class="space-y-4">
-            <div>
-                <label for="token-input" class="block text-sm font-medium text-gray-700 mb-1">Token</label>
-                <input type="text" name="token" id="token-input"
-                       class="w-full border rounded px-3 py-2"
-                       placeholder="输入JWT Token">
+    <!-- Token Configuration Modal -->
+    <div id="token-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeTokenModal()">&times;</span>
+            <h2 class="text-xl font-semibold mb-4">RiskBird API 配置</h2>
+
+            <form id="token-form" class="space-y-4">
+                <div>
+                    <label for="token-input" class="block text-sm font-medium text-gray-700 mb-1">Token</label>
+                    <input type="text" name="token" id="token-input"
+                           class="w-full border rounded px-3 py-2"
+                           placeholder="输入JWT Token">
+                </div>
+
+                <div>
+                    <label for="uuid-input" class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
+                    <input type="text" name="app_uuid" id="uuid-input"
+                           class="w-full border rounded px-3 py-2"
+                           placeholder="输入App UUID（如：WEB-B411E1DF...）">
+                </div>
+
+                <div class="flex space-x-4">
+                    <button type="submit"
+                            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        保存配置
+                    </button>
+                    <button type="button" id="test-connection-btn"
+                            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        测试连接
+                    </button>
+                    <button type="button" onclick="closeTokenModal()"
+                            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                        取消
+                    </button>
+                </div>
+            </form>
+
+            <div id="token-status" class="mt-4 p-3 rounded hidden">
+                <span class="text-sm">状态: <span id="status-text"></span></span>
             </div>
-
-            <div>
-                <label for="uuid-input" class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
-                <input type="text" name="app_uuid" id="uuid-input"
-                       class="w-full border rounded px-3 py-2"
-                       placeholder="输入App UUID">
-            </div>
-
-            <div class="flex space-x-4">
-                <button type="submit"
-                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                    保存配置
-                </button>
-                <button type="button" id="test-connection-btn"
-                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-                    测试连接
-                </button>
-            </div>
-        </form>
-
-        <div id="token-status" class="mt-4 hidden">
-            <span class="text-sm">状态: <span id="status-text"></span></span>
         </div>
     </div>
 
-    <!-- Monitoring Configuration Card -->
-    <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4">创建监测配置</h2>
+    <!-- Monitoring Configuration Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close" onclick="closeConfigModal()">&times;</span>
+            <h2 class="text-xl font-semibold mb-4">创建监测配置</h2>
 
-        <form id="monitoring-config-form" class="space-y-4">
-            <div>
-                <label for="config-name-input" class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
-                <input type="text" name="config_name" id="config-name-input" required
-                       class="w-full border rounded px-3 py-2"
-                       placeholder="如：华东地区监测">
-            </div>
+            <form id="monitoring-config-form" class="space-y-4">
+                <div>
+                    <label for="config-name-input" class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
+                    <input type="text" name="config_name" id="config-name-input" required
+                           class="w-full border rounded px-3 py-2"
+                           placeholder="如：华东地区监测">
+                </div>
 
-            <div>
-                <label for="region-codes-select" class="block text-sm font-medium text-gray-700 mb-1">监测地区</label>
-                <select name="region_codes" id="region-codes-select" multiple
-                        class="w-full border rounded px-3 py-2 h-32">
-                    <option value="110000">北京市</option>
-                    <option value="310000">上海市</option>
-                    <option value="440000">广东省</option>
-                    <option value="320000">江苏省</option>
-                    <option value="330000">浙江省</option>
-                    <option value="370000">山东省</option>
-                    <option value="410000">河南省</option>
-                    <option value="510000">四川省</option>
-                </select>
-                <p class="text-xs text-gray-500 mt-1">按住 Ctrl/Cmd 多选</p>
-            </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">监测地区（可多选）</label>
+                    <div class="grid grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-y-auto border rounded p-3 bg-gray-50">
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="110000" class="rounded">
+                            <span>北京市</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="120000" class="rounded">
+                            <span>天津市</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="310000" class="rounded">
+                            <span>上海市</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="500000" class="rounded">
+                            <span>重庆市</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="440000" class="rounded">
+                            <span>广东省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="320000" class="rounded">
+                            <span>江苏省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="370000" class="rounded">
+                            <span>山东省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="330000" class="rounded">
+                            <span>浙江省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="410000" class="rounded">
+                            <span>河南省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="510000" class="rounded">
+                            <span>四川省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="420000" class="rounded">
+                            <span>湖北省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="350000" class="rounded">
+                            <span>福建省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="430000" class="rounded">
+                            <span>湖南省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="340000" class="rounded">
+                            <span>安徽省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="130000" class="rounded">
+                            <span>河北省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="610000" class="rounded">
+                            <span>陕西省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="360000" class="rounded">
+                            <span>江西省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="530000" class="rounded">
+                            <span>云南省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="210000" class="rounded">
+                            <span>辽宁省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="450000" class="rounded">
+                            <span>广西</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="150000" class="rounded">
+                            <span>内蒙古</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="140000" class="rounded">
+                            <span>山西省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="520000" class="rounded">
+                            <span>贵州省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="650000" class="rounded">
+                            <span>新疆</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="230000" class="rounded">
+                            <span>黑龙江省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="220000" class="rounded">
+                            <span>吉林省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="620000" class="rounded">
+                            <span>甘肃省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="460000" class="rounded">
+                            <span>海南省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="640000" class="rounded">
+                            <span>宁夏</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="630000" class="rounded">
+                            <span>青海省</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" name="region_codes" value="540000" class="rounded">
+                            <span>西藏</span>
+                        </label>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <button type="button" onclick="selectAllRegions()" class="text-sm text-blue-600 hover:underline">全选</button>
+                        <button type="button" onclick="clearAllRegions()" class="text-sm text-gray-600 hover:underline">清空</button>
+                    </div>
+                </div>
 
-            <div>
-                <label for="interval-minutes-input" class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
-                <input type="number" name="interval_minutes" id="interval-minutes-input" value="5" min="1"
-                       class="w-32 border rounded px-3 py-2">
-            </div>
+                <div>
+                    <label for="interval-minutes-input" class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
+                    <input type="number" name="interval_minutes" id="interval-minutes-input" value="5" min="1"
+                           class="w-32 border rounded px-3 py-2">
+                </div>
 
-            <div>
-                <label for="reg-cap-input" class="block text-sm font-medium text-gray-700 mb-1">注册资本筛选（可选）</label>
-                <input type="text" name="reg_cap" id="reg-cap-input"
-                       class="w-full border rounded px-3 py-2"
-                       placeholder="如：5000￥（表示5000万以上）">
-            </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">注册资本筛选</label>
+                    <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="50￥" class="text-blue-600">
+                            <span>50万以上</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="100￥" class="text-blue-600">
+                            <span>100万以上</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="200￥" class="text-blue-600">
+                            <span>200万以上</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="500￥" class="text-blue-600">
+                            <span>500万以上</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="1000￥" class="text-blue-600">
+                            <span>1000万以上</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-2 rounded border">
+                            <input type="radio" name="reg_cap" value="5000￥" class="text-blue-600">
+                            <span>5000万以上</span>
+                        </label>
+                    </div>
+                </div>
 
-            <button type="submit"
-                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                创建监测任务
-            </button>
-        </form>
+                <div class="flex space-x-4">
+                    <button type="submit"
+                            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        创建监测任务
+                    </button>
+                    <button type="button" onclick="closeConfigModal()"
+                            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Jobs Control Panel -->
@@ -117,6 +324,37 @@
         <div class="bg-white rounded-lg shadow p-6">
             <div class="text-gray-500 text-sm">待处理</div>
             <div class="text-2xl font-bold text-orange-600" id="stat-unprocessed">-</div>
+        </div>
+    </div>
+
+    <!-- Monitoring Runs Table -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">执行记录</h2>
+
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b">
+                        <th class="text-left py-2">配置名称</th>
+                        <th class="text-left py-2">执行时间</th>
+                        <th class="text-left py-2">状态</th>
+                        <th class="text-left py-2">新增企业</th>
+                        <th class="text-left py-2">跳过重复</th>
+                        <th class="text-left py-2">错误信息</th>
+                    </tr>
+                </thead>
+                <tbody id="runs-table">
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-gray-500">
+                            加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="runs-pagination" class="mt-4 flex justify-center space-x-2">
+            <!-- Pagination will be added here -->
         </div>
     </div>
 
@@ -153,6 +391,36 @@
 </div>
 
 <script>
+// Modal functions
+function openTokenModal() {
+    document.getElementById('token-modal').style.display = 'block';
+    loadTokenConfig();
+}
+
+function closeTokenModal() {
+    document.getElementById('token-modal').style.display = 'none';
+}
+
+function openConfigModal() {
+    document.getElementById('config-modal').style.display = 'block';
+}
+
+function closeConfigModal() {
+    document.getElementById('config-modal').style.display = 'none';
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const tokenModal = document.getElementById('token-modal');
+    const configModal = document.getElementById('config-modal');
+    if (event.target == tokenModal) {
+        tokenModal.style.display = 'none';
+    }
+    if (event.target == configModal) {
+        configModal.style.display = 'none';
+    }
+}
+
 // Token Configuration
 document.getElementById('token-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -224,18 +492,38 @@ document.getElementById('test-connection-btn').addEventListener('click', async (
     });
 });
 
+// Helper functions for region selection
+function selectAllRegions() {
+    document.querySelectorAll('input[name="region_codes"]').forEach(cb => cb.checked = true);
+}
+
+function clearAllRegions() {
+    document.querySelectorAll('input[name="region_codes"]').forEach(cb => cb.checked = false);
+}
+
 // Monitoring Configuration
 document.getElementById('monitoring-config-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const regionCodes = Array.from(document.querySelector('select[name="region_codes"]').selectedOptions)
-                           .map(opt => opt.value);
+
+    // Get selected regions from checkboxes
+    const regionCodes = Array.from(document.querySelectorAll('input[name="region_codes"]:checked'))
+                           .map(cb => cb.value);
+
+    if (regionCodes.length === 0) {
+        alert('请至少选择一个地区');
+        return;
+    }
+
+    // Get selected reg_cap from radio
+    const regCapRadio = document.querySelector('input[name="reg_cap"]:checked');
+    const reg_cap = regCapRadio ? regCapRadio.value : '';
 
     const data = {
         config_name: formData.get('config_name'),
         region_codes: regionCodes,
         interval_minutes: parseInt(formData.get('interval_minutes')),
-        reg_cap: formData.get('reg_cap')
+        reg_cap: reg_cap
     };
 
     const btn = e.target.querySelector('button[type="submit"]');
@@ -248,24 +536,22 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
+    .then(async response => {
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Network response was not ok');
         }
-        return response.json();
+        return result;
     })
     .then(result => {
-        if (result.success) {
-            alert('监测配置创建成功！');
-            e.target.reset();
-            loadJobs();
-        } else {
-            alert('创建失败: ' + result.error);
-        }
+        alert('监测配置创建成功！');
+        e.target.reset();
+        closeConfigModal();
+        loadJobs();
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('请求失败，请稍后重试');
+        alert('创建失败: ' + error.message);
     })
     .finally(() => {
         btn.disabled = false;
@@ -286,8 +572,17 @@ async function loadTokenConfig() {
         if (result.success) {
             document.getElementById('token-input').value = result.configs.token || '';
             document.getElementById('uuid-input').value = result.configs.app_uuid || '';
-            document.getElementById('token-status').classList.remove('hidden');
-            document.getElementById('status-text').textContent = '已配置';
+            const statusDiv = document.getElementById('token-status');
+            statusDiv.classList.remove('hidden');
+            if (result.configs.token && result.configs.app_uuid) {
+                statusDiv.classList.remove('bg-red-100');
+                statusDiv.classList.add('bg-green-100');
+                document.getElementById('status-text').textContent = '✅ 已配置';
+            } else {
+                statusDiv.classList.remove('bg-green-100');
+                statusDiv.classList.add('bg-red-100');
+                document.getElementById('status-text').textContent = '⚠️ 未配置';
+            }
         }
     })
     .catch(error => {
@@ -322,6 +617,10 @@ async function loadJobs() {
                         <button onclick="toggleJob(${job.config_id})"
                                 class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
                             ${job.paused ? '恢复' : '暂停'}
+                        </button>
+                        <button onclick="deleteJob(${job.config_id}, '${job.name}')"
+                                class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                            删除
                         </button>
                     </div>
                 </div>
@@ -380,6 +679,33 @@ async function toggleJob(configId) {
     });
 }
 
+async function deleteJob(configId, jobName) {
+    if (!confirm(`确定要删除监测任务"${jobName}"吗？\n\n删除后将停止该任务的定时执行。`)) return;
+
+    fetch(`/api/monitoring/configs/${configId}`, {
+        method: 'DELETE'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            alert('任务删除成功！');
+            loadJobs();
+            loadStats();
+        } else {
+            alert('删除失败: ' + result.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
+    });
+}
+
 async function loadStats() {
     fetch('/api/monitoring/stats')
     .then(response => {
@@ -399,6 +725,69 @@ async function loadStats() {
     .catch(error => {
         console.error('Error loading stats:', error);
     });
+}
+
+let runsCurrentOffset = 0;
+const runsLimit = 10;
+
+async function loadRuns(offset = 0) {
+    runsCurrentOffset = offset;
+    fetch(`/api/monitoring/runs?limit=${runsLimit}&offset=${offset}`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        const tbody = document.getElementById('runs-table');
+        if (result.runs && result.runs.length > 0) {
+            tbody.innerHTML = result.runs.map(run => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="py-2">${run.config_name}</td>
+                    <td class="py-2 text-sm text-gray-600">
+                        ${new Date(run.run_time).toLocaleString()}
+                    </td>
+                    <td class="py-2">
+                        ${run.success
+                            ? '<span class="text-green-600">✓ 成功</span>'
+                            : '<span class="text-red-600">✗ 失败</span>'}
+                    </td>
+                    <td class="py-2 text-center">${run.companies_added}</td>
+                    <td class="py-2 text-center">${run.companies_skipped}</td>
+                    <td class="py-2 text-sm text-red-600">${run.error_message || '-'}</td>
+                </tr>
+            `).join('');
+
+            // Update pagination
+            updateRunsPagination(result.total, offset);
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无执行记录</td></tr>';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading runs:', error);
+    });
+}
+
+function updateRunsPagination(total, offset) {
+    const container = document.getElementById('runs-pagination');
+    const totalPages = Math.ceil(total / runsLimit);
+    const currentPage = Math.floor(offset / runsLimit) + 1;
+
+    let html = '';
+
+    if (currentPage > 1) {
+        html += `<button onclick="loadRuns(${offset - runsLimit})" class="px-3 py-1 border rounded">上一页</button>`;
+    }
+
+    html += `<span class="px-3 py-1">第 ${currentPage} / ${totalPages} 页 (共 ${total} 条)</span>`;
+
+    if (currentPage < totalPages) {
+        html += `<button onclick="loadRuns(${offset + runsLimit})" class="px-3 py-1 border rounded">下一页</button>`;
+    }
+
+    container.innerHTML = html;
 }
 
 let currentOffset = 0;
@@ -462,9 +851,9 @@ function updatePagination(total, offset) {
 
 // Initial load
 document.addEventListener('DOMContentLoaded', () => {
-    loadTokenConfig();
     loadJobs();
     loadStats();
+    loadRuns();
     loadCompanies();
 });
 
@@ -472,6 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
 setInterval(() => {
     loadJobs();
     loadStats();
+    loadRuns(runsCurrentOffset);
     loadCompanies(currentOffset);
 }, 30000);
 </script>

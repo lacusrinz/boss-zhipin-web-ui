@@ -83,6 +83,16 @@ def setup_scheduler():
 scheduler = setup_scheduler()
 
 
+def ensure_scheduler_started():
+    """Ensure the scheduler is started (for when running outside main())"""
+    if not scheduler.running:
+        try:
+            scheduler.start()
+            logging.info("Scheduler started")
+        except Exception as e:
+            logging.error(f"Failed to start scheduler: {e}")
+
+
 # ==================== Monitoring Job Helper Functions ====================
 
 def run_monitoring_task_wrapper(config_id: int):
@@ -104,6 +114,18 @@ def run_monitoring_task_wrapper(config_id: int):
             monitor = RiskBirdMonitor(db)
             result = monitor.run_monitoring_task(config_id)
             logging.info(f"Job {job_id} completed: {result}")
+
+            # Record the run before closing connection
+            config = db.get_monitoring_config(config_id)
+            config_name = config['config_name'] if config else f'Config {config_id}'
+            db.insert_monitoring_run(
+                config_id=config_id,
+                config_name=config_name,
+                success=result['success'],
+                companies_added=result['companies_added'],
+                companies_skipped=result['companies_skipped'],
+                error_message=result.get('error')
+            )
         finally:
             db.close()
 
@@ -117,16 +139,39 @@ def add_monitoring_job(config_id: int, interval_minutes: int):
     """
     job_id = f'monitoring_{config_id}'
 
-    scheduler.add_job(
-        func='web_app:run_monitoring_task_wrapper',
-        trigger=IntervalTrigger(minutes=interval_minutes),
-        id=job_id,
-        name=f'Monitoring Config {config_id}',
-        replace_existing=True,
-        args=[config_id]
-    )
+    # Check if scheduler is running
+    if not scheduler.running:
+        logging.warning(f"Scheduler is not running, attempting to start it")
+        try:
+            scheduler.start()
+            logging.info(f"Scheduler started successfully")
+        except Exception as e:
+            logging.error(f"Failed to start scheduler: {e}")
+            return False
 
-    logging.info(f"Added monitoring job: {job_id} (interval: {interval_minutes} min)")
+    # Get config name from database for display
+    db = get_db()
+    config_name = f'Monitoring Config {config_id}'
+    if db.conn:
+        config = db.get_monitoring_config(config_id)
+        if config:
+            config_name = config['config_name']
+        db.close()
+
+    try:
+        scheduler.add_job(
+            func='web_app:run_monitoring_task_wrapper',
+            trigger=IntervalTrigger(minutes=interval_minutes),
+            id=job_id,
+            name=config_name,
+            replace_existing=True,
+            args=[config_id]
+        )
+        logging.info(f"Added monitoring job: {job_id} (interval: {interval_minutes} min)")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to add job {job_id} to scheduler: {e}")
+        return False
 
 def remove_monitoring_job(config_id: int):
     """
@@ -141,7 +186,22 @@ def remove_monitoring_job(config_id: int):
         logging.info(f"Removed monitoring job: {job_id}")
         return True
     except Exception as e:
-        logging.error(f"Failed to remove job {job_id}: {e}")
+        # Job might not be in scheduler memory but could be in jobstore
+        # Try to remove it directly from the database jobstore
+        logging.warning(f"Failed to remove job {job_id} from scheduler: {e}")
+        try:
+            # Remove directly from APScheduler's jobstore table
+            db = get_db()
+            if db.conn:
+                db.cursor.execute("DELETE FROM apscheduler_jobs WHERE id = ?", (job_id,))
+                db.conn.commit()
+                db.close()
+                logging.info(f"Removed orphaned job record from database: {job_id}")
+                return True
+        except Exception as db_error:
+            logging.error(f"Failed to remove job {job_id} from database: {db_error}")
+            if db.conn:
+                db.close()
         return False
 
 def pause_monitoring_job(config_id: int):
@@ -165,20 +225,26 @@ def resume_monitoring_job(config_id: int):
         return False
 
 def run_monitoring_job_now(config_id: int):
-    """Run a monitoring job immediately"""
-    job_id = f'monitoring_{config_id}'
+    """Run a monitoring job immediately by calling the wrapper function directly"""
     try:
-        scheduler.run_job(job_id)
+        run_monitoring_task_wrapper(config_id)
         return True
     except Exception as e:
-        logging.error(f"Failed to run job {job_id}: {e}")
+        logging.error(f"Failed to run job monitoring_{config_id}: {e}")
         return False
 
 
 # ==================== 数据库连接 ====================
 
-def get_db():
-    """获取数据库连接"""
+# 全局初始化标志
+_db_initialized = False
+
+def _initialize_database_once():
+    """只初始化一次数据库（表结构、列升级等）"""
+    global _db_initialized
+    if _db_initialized:
+        return True
+
     db = BOSSDatabase(str(DB_PATH))
     if db.connect():
         # 先初始化表（如果不存在）
@@ -188,6 +254,19 @@ def get_db():
         db.add_discarded_column()
         # 初始化监测表
         db.init_monitoring_tables()
+        db.close()
+        _db_initialized = True
+        return True
+    return False
+
+def get_db():
+    """获取数据库连接（不再重复初始化）"""
+    # 确保数据库已初始化
+    _initialize_database_once()
+
+    # 创建新的数据库连接
+    db = BOSSDatabase(str(DB_PATH))
+    db.connect()
     return db
 
 
@@ -196,6 +275,10 @@ def get_db():
 @app.route('/')
 def index():
     """首页：HTML 粘贴页面"""
+    # Ensure scheduler and database are initialized
+    ensure_scheduler_started()
+    _initialize_database_once()
+
     supported_sites = get_supported_sites()
     enabled_sites = [s for s in supported_sites if s.get('enabled', False)]
     return render_template('paste.html', sites=enabled_sites)
@@ -481,7 +564,7 @@ def create_monitoring_config():
     reg_cap = data.get('reg_cap', '').strip()
 
     if not config_name:
-        return jsonify({'success': False, 'error': '配置名称不能为空'})
+        return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
 
     if not isinstance(region_codes, list) or not region_codes:
         return jsonify({'success': False, 'error': '地区代码必须是非空数组'}), 400
@@ -491,28 +574,37 @@ def create_monitoring_config():
 
     db = get_db()
     if not db.conn:
-        return jsonify({'success': False, 'error': '数据库连接失败'})
+        return jsonify({'success': False, 'error': '数据库连接失败'}), 500
 
-    # Convert region list to JSON string
-    import json
-    region_codes_json = json.dumps(region_codes)
+    try:
+        # Convert region list to JSON string
+        import json
+        region_codes_json = json.dumps(region_codes)
 
-    config_id = db.insert_monitoring_config(
-        config_name=config_name,
-        region_codes=region_codes_json,
-        interval_minutes=interval_minutes,
-        reg_cap=reg_cap if reg_cap else None
-    )
+        config_id = db.insert_monitoring_config(
+            config_name=config_name,
+            region_codes=region_codes_json,
+            interval_minutes=interval_minutes,
+            reg_cap=reg_cap if reg_cap else None
+        )
 
-    if config_id:
+        if not config_id:
+            db.close()
+            return jsonify({'success': False, 'error': '创建配置失败: 数据库插入返回None'}), 500
+
         # Add job to scheduler
-        add_monitoring_job(config_id, interval_minutes)
+        job_added = add_monitoring_job(config_id, interval_minutes)
+
+        if not job_added:
+            logging.warning(f"Failed to add scheduler job for config {config_id}")
 
         db.close()
-        return jsonify({'success': True, 'config_id': config_id})
-    else:
+        return jsonify({'success': True, 'config_id': config_id, 'job_added': job_added})
+
+    except Exception as e:
+        logging.error(f"Failed to create monitoring config: {e}", exc_info=True)
         db.close()
-        return jsonify({'success': False, 'error': '创建配置失败'})
+        return jsonify({'success': False, 'error': f'创建配置失败: {str(e)}'}), 500
 
 
 @app.route('/api/monitoring/configs/<int:config_id>', methods=['PUT'])
@@ -558,19 +650,19 @@ def delete_monitoring_config(config_id):
     """Delete monitoring configuration"""
     db = get_db()
     if not db.conn:
-        return jsonify({'success': False, 'error': '数据库连接失败'})
+        return jsonify({'success': False, 'error': '数据库连接失败'}), 500
 
-    # Remove from scheduler
-    remove_monitoring_job(config_id)
+    # Remove from scheduler (now handles orphaned job records)
+    job_removed = remove_monitoring_job(config_id)
 
     # Delete from database
     success = db.delete_monitoring_config(config_id)
     db.close()
 
     if success:
-        return jsonify({'success': True, 'message': '配置已删除'})
+        return jsonify({'success': True, 'message': '配置已删除', 'job_removed': job_removed})
     else:
-        return jsonify({'success': False, 'error': '删除配置失败'})
+        return jsonify({'success': False, 'error': '删除配置失败'}), 500
 
 
 @app.route('/api/monitoring/jobs', methods=['GET'])
@@ -672,6 +764,35 @@ def get_monitored_companies():
     })
 
 
+@app.route('/api/monitoring/runs', methods=['GET'])
+def get_monitoring_runs():
+    """Get monitoring run records with pagination"""
+    config_id = request.args.get('config_id', type=int)
+    limit = request.args.get('limit', 50, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    runs = db.get_monitoring_runs(
+        config_id=config_id,
+        limit=limit,
+        offset=offset
+    )
+
+    total = db.get_monitoring_runs_count()
+    db.close()
+
+    return jsonify({
+        'success': True,
+        'runs': runs,
+        'total': total,
+        'limit': limit,
+        'offset': offset
+    })
+
+
 @app.route('/api/monitoring/stats', methods=['GET'])
 def get_monitoring_stats():
     """Get monitoring statistics"""
@@ -725,11 +846,8 @@ def main():
     print("\n按 Ctrl+C 停止服务器")
     print("=" * 60)
 
-    # 确保数据库存在并初始化
-    db = get_db()
-    if db.conn:
-        db.init_monitoring_tables()  # Initialize monitoring tables
-        db.close()
+    # 确保数据库存在并初始化（在启动时完成）
+    _initialize_database_once()
 
     # Start scheduler
     scheduler.start()
@@ -737,7 +855,7 @@ def main():
 
     # 启动 Flask 开发服务器
     try:
-        app.run(debug=True, host='127.0.0.1', port=5001, use_reloader=False)
+        app.run(debug=False, host='127.0.0.1', port=5001)
     finally:
         scheduler.shutdown()
 
