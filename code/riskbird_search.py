@@ -7,7 +7,14 @@ RiskBird API 高级搜索接口访问脚本
 
 import requests
 import json
+import logging
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # ==================== 配置区域 ====================
 
@@ -332,14 +339,29 @@ def call_riskbird_search_api(token: str, app_uuid: str, search_params: dict) -> 
             timeout=30
         )
 
+        # Log response details for debugging
+        logging.info(f"RiskBird API Response: status={response.status_code}")
+
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 401:
             return {'error': 'unauthorized', 'message': 'Token expired or invalid'}
         else:
-            return {'error': 'api_error', 'status_code': response.status_code}
+            # Try to parse error response from API
+            error_detail = f"HTTP {response.status_code}"
+            try:
+                error_data = response.json()
+                error_detail += f" - {error_data}"
+            except:
+                # If not JSON, include text response
+                if response.text:
+                    error_detail += f" - {response.text[:200]}"
+
+            logging.error(f"RiskBird API error: {error_detail}")
+            return {'error': 'api_error', 'status_code': response.status_code, 'message': error_detail}
 
     except requests.exceptions.RequestException as e:
+        logging.error(f"RiskBird API request failed: {e}")
         return {'error': 'request_failed', 'message': str(e)}
 
 # ==================== 主程序 ====================

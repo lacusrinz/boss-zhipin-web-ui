@@ -158,14 +158,35 @@ class RiskBirdMonitor:
             # Build search params
             search_params = self.build_search_params_from_config(config)
 
+            # Log the search params for debugging
+            import json
+            region_codes_value = config.get('region_codes', '[]')
+            if isinstance(region_codes_value, list):
+                regions = region_codes_value
+            else:
+                import json as json_mod
+                regions = json_mod.loads(region_codes_value)
+            regions_str = ','.join(regions) if regions else ''
+
+            self.logger.info(f"Querying RiskBird API: regions={regions_str}, "
+                           f"capital={config.get('reg_cap', '')}, "
+                           f"date={config.get('es_date', 'N/A')}")
+
             # Call API
             api_response = self.call_riskbird_api(token, app_uuid, search_params)
 
             if 'error' in api_response:
                 if api_response['error'] == 'unauthorized':
                     result['error'] = 'Token expired or invalid'
+                elif api_response['error'] == 'request_failed':
+                    result['error'] = f'Network request failed: {api_response.get("message", "")}'
+                elif api_response['error'] == 'api_error':
+                    status_code = api_response.get('status_code', 'Unknown')
+                    message = api_response.get('message', '')
+                    result['error'] = f'API error (HTTP {status_code}): {message}'
                 else:
                     result['error'] = api_response.get('message', 'API call failed')
+                # Don't return here - let it fall through to record the error
                 return result
 
             # Parse companies
@@ -184,9 +205,11 @@ class RiskBirdMonitor:
                 else:
                     skipped += 1
 
+            # Mark as successful even if no companies found
             result['success'] = True
             result['companies_added'] = added
             result['companies_skipped'] = skipped
+            result['error'] = None  # Clear error for successful runs
 
             self.logger.info(f"Monitoring task completed: {added} added, {skipped} skipped")
 
