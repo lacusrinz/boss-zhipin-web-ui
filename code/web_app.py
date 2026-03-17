@@ -91,9 +91,10 @@ def get_db():
     if db.connect():
         # 先初始化表（如果不存在）
         db.init_tables()
-        # 再添加 is_imported 列（如果需要升级旧数据库）
+        # 添加升级列
         db.add_is_imported_column()
-        # 初始化监控表（如果不存在）
+        db.add_discarded_column()
+        # 初始化监测表
         db.init_monitoring_tables()
     return db
 
