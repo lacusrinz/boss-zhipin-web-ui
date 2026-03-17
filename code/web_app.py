@@ -83,6 +83,98 @@ def setup_scheduler():
 scheduler = setup_scheduler()
 
 
+# ==================== Monitoring Job Helper Functions ====================
+
+def run_monitoring_task_wrapper(config_id: int):
+    """
+    Wrapper function for running monitoring tasks (called by scheduler)
+
+    Args:
+        config_id: Monitoring configuration ID
+    """
+    # Deferred import to avoid circular dependency with riskbird_monitor module
+    # which imports from database and riskbird_search
+    from riskbird_monitor import RiskBirdMonitor
+
+    job_id = f'monitoring_{config_id}'
+    db = get_db()
+
+    if db.conn:
+        try:
+            monitor = RiskBirdMonitor(db)
+            result = monitor.run_monitoring_task(config_id)
+            logging.info(f"Job {job_id} completed: {result}")
+        finally:
+            db.close()
+
+def add_monitoring_job(config_id: int, interval_minutes: int):
+    """
+    Add a monitoring job to the scheduler
+
+    Args:
+        config_id: Monitoring configuration ID
+        interval_minutes: Interval in minutes
+    """
+    job_id = f'monitoring_{config_id}'
+
+    scheduler.add_job(
+        func='web_app:run_monitoring_task_wrapper',
+        trigger=IntervalTrigger(minutes=interval_minutes),
+        id=job_id,
+        name=f'Monitoring Config {config_id}',
+        replace_existing=True,
+        args=[config_id]
+    )
+
+    logging.info(f"Added monitoring job: {job_id} (interval: {interval_minutes} min)")
+
+def remove_monitoring_job(config_id: int):
+    """
+    Remove a monitoring job from the scheduler
+
+    Args:
+        config_id: Monitoring configuration ID
+    """
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.remove_job(job_id)
+        logging.info(f"Removed monitoring job: {job_id}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to remove job {job_id}: {e}")
+        return False
+
+def pause_monitoring_job(config_id: int):
+    """Pause a monitoring job"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.pause_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to pause job {job_id}: {e}")
+        return False
+
+def resume_monitoring_job(config_id: int):
+    """Resume a paused monitoring job"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.resume_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to resume job {job_id}: {e}")
+        return False
+
+def run_monitoring_job_now(config_id: int):
+    """Run a monitoring job immediately"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.run_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to run job {job_id}: {e}")
+        return False
+
+
 # ==================== 数据库连接 ====================
 
 def get_db():
@@ -652,86 +744,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# ==================== Monitoring Job Management ====================
-
-def add_monitoring_job(config_id: int, interval_minutes: int):
-    """
-    Add a monitoring job to the scheduler
-
-    Args:
-        config_id: Monitoring configuration ID
-        interval_minutes: Interval in minutes
-    """
-    # Deferred import to avoid circular dependency with riskbird_monitor module
-    # which imports from database and riskbird_search
-    from riskbird_monitor import RiskBirdMonitor
-
-    job_id = f'monitoring_{config_id}'
-
-    def run_job():
-        db = get_db()
-        if db.conn:
-            try:
-                monitor = RiskBirdMonitor(db)
-                result = monitor.run_monitoring_task(config_id)
-                logging.info(f"Job {job_id} completed: {result}")
-            finally:
-                db.close()
-
-    scheduler.add_job(
-        func=run_job,
-        trigger=IntervalTrigger(minutes=interval_minutes),
-        id=job_id,
-        name=f'Monitoring Config {config_id}',
-        replace_existing=True
-    )
-
-    logging.info(f"Added monitoring job: {job_id} (interval: {interval_minutes} min)")
-
-def remove_monitoring_job(config_id: int):
-    """
-    Remove a monitoring job from the scheduler
-
-    Args:
-        config_id: Monitoring configuration ID
-    """
-    job_id = f'monitoring_{config_id}'
-    try:
-        scheduler.remove_job(job_id)
-        logging.info(f"Removed monitoring job: {job_id}")
-        return True
-    except Exception as e:
-        logging.error(f"Failed to remove job {job_id}: {e}")
-        return False
-
-def pause_monitoring_job(config_id: int):
-    """Pause a monitoring job"""
-    job_id = f'monitoring_{config_id}'
-    try:
-        scheduler.pause_job(job_id)
-        return True
-    except Exception as e:
-        logging.error(f"Failed to pause job {job_id}: {e}")
-        return False
-
-def resume_monitoring_job(config_id: int):
-    """Resume a paused monitoring job"""
-    job_id = f'monitoring_{config_id}'
-    try:
-        scheduler.resume_job(job_id)
-        return True
-    except Exception as e:
-        logging.error(f"Failed to resume job {job_id}: {e}")
-        return False
-
-def run_monitoring_job_now(config_id: int):
-    """Run a monitoring job immediately"""
-    job_id = f'monitoring_{config_id}'
-    try:
-        scheduler.run_job(job_id)
-        return True
-    except Exception as e:
-        logging.error(f"Failed to run job {job_id}: {e}")
-        return False
