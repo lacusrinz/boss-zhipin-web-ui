@@ -670,6 +670,415 @@ class BOSSDatabase:
             logging.error(f"获取岗位列表失败: {e}")
             return []
 
+    # ==================== Monitoring Database Methods ====================
+
+    def init_monitoring_tables(self):
+        """
+        Initialize monitoring-related tables
+        """
+        try:
+            # Create riskbird_config table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS riskbird_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_key TEXT NOT NULL UNIQUE,
+                    config_value TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_by TEXT DEFAULT 'system'
+                )
+            """)
+
+            # Create monitoring_configs table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS monitoring_configs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_name TEXT NOT NULL,
+                    region_codes TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    interval_minutes INTEGER DEFAULT 5,
+                    reg_cap TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Create monitored_companies table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS monitored_companies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_id INTEGER,
+                    company_name TEXT NOT NULL,
+                    credit_code TEXT UNIQUE,
+                    reg_date TEXT,
+                    reg_cap TEXT,
+                    region_code TEXT,
+                    region_name TEXT,
+                    legal_representative TEXT,
+                    contact TEXT,
+                    address TEXT,
+                    business_scope TEXT,
+                    monitoring_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    source TEXT DEFAULT 'riskbird',
+                    is_processed BOOLEAN DEFAULT 0,
+                    notes TEXT,
+                    FOREIGN KEY (config_id) REFERENCES monitoring_configs (id)
+                )
+            """)
+
+            # Create indexes
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_company_name
+                ON monitored_companies(company_name)
+            """)
+
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_monitoring_time
+                ON monitored_companies(monitoring_time)
+            """)
+
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_config_time
+                ON monitored_companies(config_id, monitoring_time)
+            """)
+
+            self.cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_code
+                ON monitored_companies(credit_code)
+            """)
+
+            self.conn.commit()
+            logging.info("Monitoring tables initialized successfully")
+            return True
+
+        except Exception as e:
+            logging.error(f"Failed to initialize monitoring tables: {e}")
+            return False
+
+    def insert_riskbird_config(self, config_key: str, config_value: str) -> bool:
+        """
+        Insert or update riskbird config
+
+        Args:
+            config_key: Configuration key
+            config_value: Configuration value
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            self.cursor.execute("""
+                INSERT OR REPLACE INTO riskbird_config (config_key, config_value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (config_key, config_value))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Failed to insert riskbird config: {e}")
+            return False
+
+    def get_riskbird_config(self, config_key: str) -> Optional[str]:
+        """
+        Get riskbird config value
+
+        Args:
+            config_key: Configuration key
+
+        Returns:
+            str: Configuration value or None
+        """
+        try:
+            self.cursor.execute("""
+                SELECT config_value FROM riskbird_config
+                WHERE config_key = ? AND is_active = 1
+            """, (config_key,))
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            logging.error(f"Failed to get riskbird config: {e}")
+            return None
+
+    def get_all_riskbird_configs(self) -> Dict[str, str]:
+        """
+        Get all active riskbird configs
+
+        Returns:
+            dict: All config key-value pairs
+        """
+        try:
+            self.cursor.execute("""
+                SELECT config_key, config_value FROM riskbird_config
+                WHERE is_active = 1
+            """)
+            return {row[0]: row[1] for row in self.cursor.fetchall()}
+        except Exception as e:
+            logging.error(f"Failed to get all riskbird configs: {e}")
+            return {}
+
+    def update_riskbird_config(self, config_key: str, config_value: str) -> bool:
+        """
+        Update riskbird config
+
+        Args:
+            config_key: Configuration key
+            config_value: New configuration value
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            self.cursor.execute("""
+                UPDATE riskbird_config
+                SET config_value = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE config_key = ?
+            """, (config_value, config_key))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Failed to update riskbird config: {e}")
+            return False
+
+    def insert_monitoring_config(self, config_name: str, region_codes: str,
+                                 interval_minutes: int = 5, reg_cap: str = None) -> Optional[int]:
+        """
+        Insert monitoring config
+
+        Args:
+            config_name: Configuration name
+            region_codes: Region codes JSON string
+            interval_minutes: Monitoring interval in minutes
+            reg_cap: Registered capital filter (optional)
+
+        Returns:
+            int: Config ID or None
+        """
+        try:
+            self.cursor.execute("""
+                INSERT INTO monitoring_configs
+                (config_name, region_codes, interval_minutes, reg_cap)
+                VALUES (?, ?, ?, ?)
+            """, (config_name, region_codes, interval_minutes, reg_cap))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Failed to insert monitoring config: {e}")
+            return None
+
+    def get_all_monitoring_configs(self) -> List[Dict]:
+        """
+        Get all monitoring configs
+
+        Returns:
+            list: List of config dicts
+        """
+        try:
+            self.cursor.execute("""
+                SELECT id, config_name, region_codes, is_active,
+                       interval_minutes, reg_cap, created_at, updated_at
+                FROM monitoring_configs
+                ORDER BY id DESC
+            """)
+            rows = self.cursor.fetchall()
+            columns = ['id', 'config_name', 'region_codes', 'is_active',
+                      'interval_minutes', 'reg_cap', 'created_at', 'updated_at']
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logging.error(f"Failed to get monitoring configs: {e}")
+            return []
+
+    def get_monitoring_config(self, config_id: int) -> Optional[Dict]:
+        """
+        Get specific monitoring config
+
+        Args:
+            config_id: Configuration ID
+
+        Returns:
+            dict: Config data or None
+        """
+        try:
+            self.cursor.execute("""
+                SELECT id, config_name, region_codes, is_active,
+                       interval_minutes, reg_cap, created_at, updated_at
+                FROM monitoring_configs
+                WHERE id = ?
+            """, (config_id,))
+            row = self.cursor.fetchone()
+            if row:
+                columns = ['id', 'config_name', 'region_codes', 'is_active',
+                          'interval_minutes', 'reg_cap', 'created_at', 'updated_at']
+                return dict(zip(columns, row))
+            return None
+        except Exception as e:
+            logging.error(f"Failed to get monitoring config: {e}")
+            return None
+
+    def update_monitoring_config(self, config_id: int, **kwargs) -> bool:
+        """
+        Update monitoring config
+
+        Args:
+            config_id: Configuration ID
+            **kwargs: Fields to update
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            if not kwargs:
+                return False
+
+            set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
+            values = list(kwargs.values()) + [config_id]
+
+            self.cursor.execute(f"""
+                UPDATE monitoring_configs
+                SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, values)
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Failed to update monitoring config: {e}")
+            return False
+
+    def delete_monitoring_config(self, config_id: int) -> bool:
+        """
+        Delete monitoring config
+
+        Args:
+            config_id: Configuration ID
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            self.cursor.execute("DELETE FROM monitoring_configs WHERE id = ?", (config_id,))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Failed to delete monitoring config: {e}")
+            return False
+
+    def insert_monitored_company(self, company_data: Dict) -> Optional[int]:
+        """
+        Insert monitored company with duplicate check
+
+        Args:
+            company_data: Company data dict
+
+        Returns:
+            int: Company ID or None (if duplicate)
+        """
+        try:
+            self.cursor.execute("""
+                INSERT INTO monitored_companies
+                (config_id, company_name, credit_code, reg_date, reg_cap,
+                 region_code, region_name, legal_representative, contact,
+                 address, business_scope)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                company_data.get('config_id'),
+                company_data.get('company_name'),
+                company_data.get('credit_code'),
+                company_data.get('reg_date'),
+                company_data.get('reg_cap'),
+                company_data.get('region_code'),
+                company_data.get('region_name'),
+                company_data.get('legal_representative'),
+                company_data.get('contact'),
+                company_data.get('address'),
+                company_data.get('business_scope')
+            ))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except sqlite3.IntegrityError:
+            # Duplicate credit_code
+            logging.debug(f"Duplicate company: {company_data.get('credit_code')}")
+            return None
+        except Exception as e:
+            logging.error(f"Failed to insert monitored company: {e}")
+            return None
+
+    def get_monitored_companies(self, config_id: int = None, limit: int = 100,
+                                offset: int = 0) -> List[Dict]:
+        """
+        Get monitored companies with pagination
+
+        Args:
+            config_id: Filter by config ID (optional)
+            limit: Number of results
+            offset: Pagination offset
+
+        Returns:
+            list: List of company dicts
+        """
+        try:
+            query = """
+                SELECT id, config_id, company_name, credit_code, reg_date,
+                       reg_cap, region_code, region_name, monitoring_time,
+                       is_processed, source
+                FROM monitored_companies
+                WHERE 1=1
+            """
+            params = []
+
+            if config_id:
+                query += " AND config_id = ?"
+                params.append(config_id)
+
+            query += " ORDER BY monitoring_time DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            columns = ['id', 'config_id', 'company_name', 'credit_code', 'reg_date',
+                      'reg_cap', 'region_code', 'region_name', 'monitoring_time',
+                      'is_processed', 'source']
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logging.error(f"Failed to get monitored companies: {e}")
+            return []
+
+    def get_monitoring_stats(self) -> Dict:
+        """
+        Get monitoring statistics
+
+        Returns:
+            dict: Statistics
+        """
+        try:
+            stats = {}
+
+            # Total companies monitored
+            self.cursor.execute("SELECT COUNT(*) FROM monitored_companies")
+            stats['total_companies'] = self.cursor.fetchone()[0]
+
+            # Today's additions
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM monitored_companies
+                WHERE DATE(monitoring_time) = DATE('now')
+            """)
+            stats['today_added'] = self.cursor.fetchone()[0]
+
+            # Active configs
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM monitoring_configs WHERE is_active = 1
+            """)
+            stats['active_configs'] = self.cursor.fetchone()[0]
+
+            # Unprocessed companies
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM monitored_companies WHERE is_processed = 0
+            """)
+            stats['unprocessed'] = self.cursor.fetchone()[0]
+
+            return stats
+        except Exception as e:
+            logging.error(f"Failed to get monitoring stats: {e}")
+            return {}
+
 
 def main():
     """测试数据库功能"""
