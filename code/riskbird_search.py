@@ -59,7 +59,7 @@ def build_search_params(
     dom="",
     opscope="",
     nicid="",
-    status="",
+    status="1",
     enttype="",
     page_start=0,
     page_length=10
@@ -329,6 +329,12 @@ def call_riskbird_search_api(token: str, app_uuid: str, search_params: dict) -> 
         dict: API response
     """
     request_data = get_riskbird_request_data(token, app_uuid, search_params)
+
+    # Debug: log request details
+    logging.info(f"Sending request to RiskBird API...")
+    logging.info(f"URL: {SEARCH_API_URL}")
+    logging.info(f"Cookies: {list(request_data['cookies'].keys())}")
+    logging.info(f"Token length: {len(token)}")
 
     try:
         response = requests.post(

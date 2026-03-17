@@ -5,6 +5,8 @@ Automatically queries RiskBird API for newly registered companies
 """
 import logging
 import json
+import time
+import random
 from datetime import datetime
 from typing import Dict, List, Optional
 from database import BOSSDatabase
@@ -148,11 +150,20 @@ class RiskBirdMonitor:
                 return result
 
             # Get API credentials
-            token = self.db.get_riskbird_config('token')
+            encrypted_token = self.db.get_riskbird_config('token')
             app_uuid = self.db.get_riskbird_config('app_uuid')
 
-            if not token or not app_uuid:
+            if not encrypted_token or not app_uuid:
                 result['error'] = 'API credentials not configured'
+                return result
+
+            # Decrypt the token
+            from token_service import TokenService
+            token_service = TokenService()
+            try:
+                token = token_service.decrypt(encrypted_token)
+            except Exception as e:
+                result['error'] = f'Token decryption failed: {e}'
                 return result
 
             # Parse region codes
@@ -162,8 +173,8 @@ class RiskBirdMonitor:
             else:
                 region_codes = json.loads(region_codes_value)
 
-            # API can only handle 1 region at a time for stability - split into batches
-            MAX_REGIONS_PER_REQUEST = 1
+            # API can handle 5 regions at a time - split into batches
+            MAX_REGIONS_PER_REQUEST = 5
             region_batches = []
 
             for i in range(0, len(region_codes), MAX_REGIONS_PER_REQUEST):
@@ -180,6 +191,12 @@ class RiskBirdMonitor:
                 regions_str = ','.join(batch_regions)
                 self.logger.info(f"Batch {batch_idx}/{len(region_batches)}: regions={regions_str}")
 
+                # Add random delay between batches to avoid rate limiting
+                if batch_idx > 1:
+                    delay = random.uniform(1, 3)
+                    self.logger.info(f"Waiting {delay:.1f} seconds before batch {batch_idx}...")
+                    time.sleep(delay)
+
                 # Build search params for this batch
                 today = datetime.now().strftime('%Y-%m-%d')
                 es_date = f'{today}￥{today}'
@@ -188,8 +205,12 @@ class RiskBirdMonitor:
                 search_params = build_search_params(
                     regionid=regions_str,
                     regcap=reg_cap,
-                    esdate=es_date
+                    esdate=es_date,
+                    status='1'
                 )
+
+                # Debug: log the search params
+                self.logger.info(f"Search params for batch {batch_idx}: {str(search_params)[:200]}...")
 
                 # Call API for this batch
                 api_response = self.call_riskbird_api(token, app_uuid, search_params)
