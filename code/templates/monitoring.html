@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}企业监测 - BOSS直聘管理{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-8">企业监测管理</h1>
+
+    <!-- Token Configuration Card -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">RiskBird API 配置</h2>
+
+        <form id="token-form" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Token</label>
+                <input type="text" name="token" id="token-input"
+                       class="w-full border rounded px-3 py-2"
+                       placeholder="输入JWT Token">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
+                <input type="text" name="app_uuid" id="uuid-input"
+                       class="w-full border rounded px-3 py-2"
+                       placeholder="输入App UUID">
+            </div>
+
+            <div class="flex space-x-4">
+                <button type="submit"
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    保存配置
+                </button>
+                <button type="button" id="test-connection-btn"
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    测试连接
+                </button>
+            </div>
+        </form>
+
+        <div id="token-status" class="mt-4 hidden">
+            <span class="text-sm">状态: <span id="status-text"></span></span>
+        </div>
+    </div>
+
+    <!-- Monitoring Configuration Card -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">创建监测配置</h2>
+
+        <form id="monitoring-config-form" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
+                <input type="text" name="config_name" required
+                       class="w-full border rounded px-3 py-2"
+                       placeholder="如：华东地区监测">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">监测地区</label>
+                <select name="region_codes" multiple
+                        class="w-full border rounded px-3 py-2 h-32">
+                    <option value="110000">北京市</option>
+                    <option value="310000">上海市</option>
+                    <option value="440000">广东省</option>
+                    <option value="320000">江苏省</option>
+                    <option value="330000">浙江省</option>
+                    <option value="370000">山东省</option>
+                    <option value="410000">河南省</option>
+                    <option value="510000">四川省</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">按住 Ctrl/Cmd 多选</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
+                <input type="number" name="interval_minutes" value="5" min="1"
+                       class="w-32 border rounded px-3 py-2">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">注册资本筛选（可选）</label>
+                <input type="text" name="reg_cap"
+                       class="w-full border rounded px-3 py-2"
+                       placeholder="如：5000￥（表示5000万以上）">
+            </div>
+
+            <button type="submit"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                创建监测任务
+            </button>
+        </form>
+    </div>
+
+    <!-- Jobs Control Panel -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">任务控制</h2>
+
+        <div id="jobs-list" class="space-y-3">
+            <!-- Jobs will be loaded here -->
+            <p class="text-gray-500">加载中...</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-gray-500 text-sm">监测企业总数</div>
+            <div class="text-2xl font-bold" id="stat-total">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-gray-500 text-sm">今日新增</div>
+            <div class="text-2xl font-bold text-blue-600" id="stat-today">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-gray-500 text-sm">活跃配置</div>
+            <div class="text-2xl font-bold text-green-600" id="stat-configs">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-gray-500 text-sm">待处理</div>
+            <div class="text-2xl font-bold text-orange-600" id="stat-unprocessed">-</div>
+        </div>
+    </div>
+
+    <!-- Companies Table -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">监测结果</h2>
+
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b">
+                        <th class="text-left py-2">企业名称</th>
+                        <th class="text-left py-2">信用代码</th>
+                        <th class="text-left py-2">成立日期</th>
+                        <th class="text-left py-2">注册资本</th>
+                        <th class="text-left py-2">地区</th>
+                        <th class="text-left py-2">监测时间</th>
+                    </tr>
+                </thead>
+                <tbody id="companies-table">
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-gray-500">
+                            加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="pagination" class="mt-4 flex justify-center space-x-2">
+            <!-- Pagination will be added here -->
+        </div>
+    </div>
+</div>
+
+<script>
+// Token Configuration
+document.getElementById('token-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = {
+        token: formData.get('token'),
+        app_uuid: formData.get('app_uuid')
+    };
+
+    const response = await fetch('/api/monitoring/token', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+    if (result.success) {
+        alert('配置保存成功！');
+        loadTokenConfig();
+    } else {
+        alert('保存失败: ' + result.error);
+    }
+});
+
+document.getElementById('test-connection-btn').addEventListener('click', async () => {
+    const response = await fetch('/api/monitoring/token/test', {
+        method: 'POST'
+    });
+    const result = await response.json();
+    alert(result.success ? result.message : '连接失败: ' + result.error);
+});
+
+// Monitoring Configuration
+document.getElementById('monitoring-config-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const regionCodes = Array.from(document.querySelector('select[name="region_codes"]').selectedOptions)
+                           .map(opt => opt.value);
+
+    const data = {
+        config_name: formData.get('config_name'),
+        region_codes: regionCodes,
+        interval_minutes: parseInt(formData.get('interval_minutes')),
+        reg_cap: formData.get('reg_cap')
+    };
+
+    const response = await fetch('/api/monitoring/configs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+    if (result.success) {
+        alert('监测配置创建成功！');
+        e.target.reset();
+        loadJobs();
+    } else {
+        alert('创建失败: ' + result.error);
+    }
+});
+
+// Load functions
+async function loadTokenConfig() {
+    const response = await fetch('/api/monitoring/token');
+    const result = await response.json();
+    if (result.success) {
+        document.getElementById('token-input').value = result.configs.token || '';
+        document.getElementById('uuid-input').value = result.configs.app_uuid || '';
+        document.getElementById('token-status').classList.remove('hidden');
+        document.getElementById('status-text').textContent = '已配置';
+    }
+}
+
+async function loadJobs() {
+    const response = await fetch('/api/monitoring/jobs');
+    const result = await response.json();
+    const container = document.getElementById('jobs-list');
+
+    if (result.jobs && result.jobs.length > 0) {
+        container.innerHTML = result.jobs.map(job => `
+            <div class="flex items-center justify-between p-3 border rounded">
+                <div>
+                    <div class="font-medium">${job.name}</div>
+                    <div class="text-sm text-gray-500">
+                        下次执行: ${job.next_run_time ? new Date(job.next_run_time).toLocaleString() : '已暂停'}
+                    </div>
+                </div>
+                <div class="space-x-2">
+                    <button onclick="runJobNow(${job.config_id})"
+                            class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
+                        立即执行
+                    </button>
+                    <button onclick="toggleJob(${job.config_id})"
+                            class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                        ${job.paused ? '恢复' : '暂停'}
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        container.innerHTML = '<p class="text-gray-500">暂无监测任务</p>';
+    }
+}
+
+async function runJobNow(configId) {
+    if (!confirm('确定要立即执行此任务吗？')) return;
+
+    const response = await fetch(`/api/monitoring/jobs/${configId}/run-now`, {
+        method: 'POST'
+    });
+    const result = await response.json();
+    alert(result.success ? result.message : '执行失败: ' + result.error);
+    loadCompanies();
+}
+
+async function toggleJob(configId) {
+    const response = await fetch(`/api/monitoring/jobs/${configId}/toggle`, {
+        method: 'POST'
+    });
+    const result = await response.json();
+    if (result.success) {
+        loadJobs();
+    } else {
+        alert('操作失败: ' + result.error);
+    }
+}
+
+async function loadStats() {
+    const response = await fetch('/api/monitoring/stats');
+    const result = await response.json();
+    if (result.success) {
+        document.getElementById('stat-total').textContent = result.stats.total_companies || 0;
+        document.getElementById('stat-today').textContent = result.stats.today_added || 0;
+        document.getElementById('stat-configs').textContent = result.stats.active_configs || 0;
+        document.getElementById('stat-unprocessed').textContent = result.stats.unprocessed || 0;
+    }
+}
+
+let currentOffset = 0;
+const limit = 20;
+
+async function loadCompanies(offset = 0) {
+    currentOffset = offset;
+    const response = await fetch(`/api/monitoring/companies?limit=${limit}&offset=${offset}`);
+    const result = await response.json();
+    const tbody = document.getElementById('companies-table');
+
+    if (result.companies && result.companies.length > 0) {
+        tbody.innerHTML = result.companies.map(company => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="py-2">${company.company_name}</td>
+                <td class="py-2 text-sm text-gray-600">${company.credit_code || '-'}</td>
+                <td class="py-2">${company.reg_date || '-'}</td>
+                <td class="py-2">${company.reg_cap || '-'}</td>
+                <td class="py-2">${company.region_name || '-'}</td>
+                <td class="py-2 text-sm text-gray-600">
+                    ${new Date(company.monitoring_time).toLocaleString()}
+                </td>
+            </tr>
+        `).join('');
+
+        // Update pagination
+        updatePagination(result.total, offset);
+    } else {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无数据</td></tr>';
+    }
+}
+
+function updatePagination(total, offset) {
+    const container = document.getElementById('pagination');
+    const totalPages = Math.ceil(total / limit);
+    const currentPage = Math.floor(offset / limit) + 1;
+
+    let html = '';
+
+    if (currentPage > 1) {
+        html += `<button onclick="loadCompanies(${offset - limit})" class="px-3 py-1 border rounded">上一页</button>`;
+    }
+
+    html += `<span class="px-3 py-1">第 ${currentPage} / ${totalPages} 页 (共 ${total} 条)</span>`;
+
+    if (currentPage < totalPages) {
+        html += `<button onclick="loadCompanies(${offset + limit})" class="px-3 py-1 border rounded">下一页</button>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// Initial load
+document.addEventListener('DOMContentLoaded', () => {
+    loadTokenConfig();
+    loadJobs();
+    loadStats();
+    loadCompanies();
+});
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    loadJobs();
+    loadStats();
+    loadCompanies(currentOffset);
+}, 30000);
+</script>
+{% endblock %}

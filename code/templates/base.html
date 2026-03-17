@@ -21,6 +21,9 @@
                     <a href="{{ url_for('companies_list') }}" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-white hover:bg-blue-700 {% if request.endpoint == 'companies_list' %}bg-blue-800{% endif %}">
                         🏢 企业清单
                     </a>
+                    <a href="{{ url_for('monitoring_page') }}" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-white hover:bg-blue-700 {% if request.endpoint == 'monitoring_page' %}bg-blue-800{% endif %}">
+                        🔍 企业监测
+                    </a>
                 </div>
             </div>
         </div>
