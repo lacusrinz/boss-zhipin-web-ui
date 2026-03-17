@@ -12,14 +12,14 @@
 
         <form id="token-form" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Token</label>
+                <label for="token-input" class="block text-sm font-medium text-gray-700 mb-1">Token</label>
                 <input type="text" name="token" id="token-input"
                        class="w-full border rounded px-3 py-2"
                        placeholder="输入JWT Token">
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
+                <label for="uuid-input" class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
                 <input type="text" name="app_uuid" id="uuid-input"
                        class="w-full border rounded px-3 py-2"
                        placeholder="输入App UUID">
@@ -48,15 +48,15 @@
 
         <form id="monitoring-config-form" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
-                <input type="text" name="config_name" required
+                <label for="config-name-input" class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
+                <input type="text" name="config_name" id="config-name-input" required
                        class="w-full border rounded px-3 py-2"
                        placeholder="如：华东地区监测">
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">监测地区</label>
-                <select name="region_codes" multiple
+                <label for="region-codes-select" class="block text-sm font-medium text-gray-700 mb-1">监测地区</label>
+                <select name="region_codes" id="region-codes-select" multiple
                         class="w-full border rounded px-3 py-2 h-32">
                     <option value="110000">北京市</option>
                     <option value="310000">上海市</option>
@@ -71,14 +71,14 @@
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
-                <input type="number" name="interval_minutes" value="5" min="1"
+                <label for="interval-minutes-input" class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
+                <input type="number" name="interval_minutes" id="interval-minutes-input" value="5" min="1"
                        class="w-32 border rounded px-3 py-2">
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">注册资本筛选（可选）</label>
-                <input type="text" name="reg_cap"
+                <label for="reg-cap-input" class="block text-sm font-medium text-gray-700 mb-1">注册资本筛选（可选）</label>
+                <input type="text" name="reg_cap" id="reg-cap-input"
                        class="w-full border rounded px-3 py-2"
                        placeholder="如：5000￥（表示5000万以上）">
             </div>
@@ -162,27 +162,66 @@ document.getElementById('token-form').addEventListener('submit', async (e) => {
         app_uuid: formData.get('app_uuid')
     };
 
-    const response = await fetch('/api/monitoring/token', {
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+
+    fetch('/api/monitoring/token', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            alert('配置保存成功！');
+            loadTokenConfig();
+        } else {
+            alert('保存失败: ' + result.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
     });
-
-    const result = await response.json();
-    if (result.success) {
-        alert('配置保存成功！');
-        loadTokenConfig();
-    } else {
-        alert('保存失败: ' + result.error);
-    }
 });
 
 document.getElementById('test-connection-btn').addEventListener('click', async () => {
-    const response = await fetch('/api/monitoring/token/test', {
+    const btn = document.getElementById('test-connection-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '测试中...';
+
+    fetch('/api/monitoring/token/test', {
         method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        alert(result.success ? result.message : '连接失败: ' + result.error);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
     });
-    const result = await response.json();
-    alert(result.success ? result.message : '连接失败: ' + result.error);
 });
 
 // Monitoring Configuration
@@ -199,97 +238,167 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         reg_cap: formData.get('reg_cap')
     };
 
-    const response = await fetch('/api/monitoring/configs', {
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '创建中...';
+
+    fetch('/api/monitoring/configs', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            alert('监测配置创建成功！');
+            e.target.reset();
+            loadJobs();
+        } else {
+            alert('创建失败: ' + result.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
     });
-
-    const result = await response.json();
-    if (result.success) {
-        alert('监测配置创建成功！');
-        e.target.reset();
-        loadJobs();
-    } else {
-        alert('创建失败: ' + result.error);
-    }
 });
 
 // Load functions
 async function loadTokenConfig() {
-    const response = await fetch('/api/monitoring/token');
-    const result = await response.json();
-    if (result.success) {
-        document.getElementById('token-input').value = result.configs.token || '';
-        document.getElementById('uuid-input').value = result.configs.app_uuid || '';
-        document.getElementById('token-status').classList.remove('hidden');
-        document.getElementById('status-text').textContent = '已配置';
-    }
+    fetch('/api/monitoring/token')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            document.getElementById('token-input').value = result.configs.token || '';
+            document.getElementById('uuid-input').value = result.configs.app_uuid || '';
+            document.getElementById('token-status').classList.remove('hidden');
+            document.getElementById('status-text').textContent = '已配置';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading token config:', error);
+    });
 }
 
 async function loadJobs() {
-    const response = await fetch('/api/monitoring/jobs');
-    const result = await response.json();
-    const container = document.getElementById('jobs-list');
-
-    if (result.jobs && result.jobs.length > 0) {
-        container.innerHTML = result.jobs.map(job => `
-            <div class="flex items-center justify-between p-3 border rounded">
-                <div>
-                    <div class="font-medium">${job.name}</div>
-                    <div class="text-sm text-gray-500">
-                        下次执行: ${job.next_run_time ? new Date(job.next_run_time).toLocaleString() : '已暂停'}
+    fetch('/api/monitoring/jobs')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        const container = document.getElementById('jobs-list');
+        if (result.jobs && result.jobs.length > 0) {
+            container.innerHTML = result.jobs.map(job => `
+                <div class="flex items-center justify-between p-3 border rounded">
+                    <div>
+                        <div class="font-medium">${job.name}</div>
+                        <div class="text-sm text-gray-500">
+                            下次执行: ${job.next_run_time ? new Date(job.next_run_time).toLocaleString() : '已暂停'}
+                        </div>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="runJobNow(${job.config_id})"
+                                class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
+                            立即执行
+                        </button>
+                        <button onclick="toggleJob(${job.config_id})"
+                                class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                            ${job.paused ? '恢复' : '暂停'}
+                        </button>
                     </div>
                 </div>
-                <div class="space-x-2">
-                    <button onclick="runJobNow(${job.config_id})"
-                            class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
-                        立即执行
-                    </button>
-                    <button onclick="toggleJob(${job.config_id})"
-                            class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
-                        ${job.paused ? '恢复' : '暂停'}
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    } else {
-        container.innerHTML = '<p class="text-gray-500">暂无监测任务</p>';
-    }
+            `).join('');
+        } else {
+            container.innerHTML = '<p class="text-gray-500">暂无监测任务</p>';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading jobs:', error);
+    });
 }
 
 async function runJobNow(configId) {
     if (!confirm('确定要立即执行此任务吗？')) return;
 
-    const response = await fetch(`/api/monitoring/jobs/${configId}/run-now`, {
+    fetch(`/api/monitoring/jobs/${configId}/run-now`, {
         method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        alert(result.success ? result.message : '执行失败: ' + result.error);
+        loadCompanies();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
     });
-    const result = await response.json();
-    alert(result.success ? result.message : '执行失败: ' + result.error);
-    loadCompanies();
 }
 
 async function toggleJob(configId) {
-    const response = await fetch(`/api/monitoring/jobs/${configId}/toggle`, {
+    fetch(`/api/monitoring/jobs/${configId}/toggle`, {
         method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            loadJobs();
+        } else {
+            alert('操作失败: ' + result.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('请求失败，请稍后重试');
     });
-    const result = await response.json();
-    if (result.success) {
-        loadJobs();
-    } else {
-        alert('操作失败: ' + result.error);
-    }
 }
 
 async function loadStats() {
-    const response = await fetch('/api/monitoring/stats');
-    const result = await response.json();
-    if (result.success) {
-        document.getElementById('stat-total').textContent = result.stats.total_companies || 0;
-        document.getElementById('stat-today').textContent = result.stats.today_added || 0;
-        document.getElementById('stat-configs').textContent = result.stats.active_configs || 0;
-        document.getElementById('stat-unprocessed').textContent = result.stats.unprocessed || 0;
-    }
+    fetch('/api/monitoring/stats')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            document.getElementById('stat-total').textContent = result.stats.total_companies || 0;
+            document.getElementById('stat-today').textContent = result.stats.today_added || 0;
+            document.getElementById('stat-configs').textContent = result.stats.active_configs || 0;
+            document.getElementById('stat-unprocessed').textContent = result.stats.unprocessed || 0;
+        }
+    })
+    .catch(error => {
+        console.error('Error loading stats:', error);
+    });
 }
 
 let currentOffset = 0;
@@ -297,29 +406,38 @@ const limit = 20;
 
 async function loadCompanies(offset = 0) {
     currentOffset = offset;
-    const response = await fetch(`/api/monitoring/companies?limit=${limit}&offset=${offset}`);
-    const result = await response.json();
-    const tbody = document.getElementById('companies-table');
+    fetch(`/api/monitoring/companies?limit=${limit}&offset=${offset}`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(result => {
+        const tbody = document.getElementById('companies-table');
+        if (result.companies && result.companies.length > 0) {
+            tbody.innerHTML = result.companies.map(company => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="py-2">${company.company_name}</td>
+                    <td class="py-2 text-sm text-gray-600">${company.credit_code || '-'}</td>
+                    <td class="py-2">${company.reg_date || '-'}</td>
+                    <td class="py-2">${company.reg_cap || '-'}</td>
+                    <td class="py-2">${company.region_name || '-'}</td>
+                    <td class="py-2 text-sm text-gray-600">
+                        ${new Date(company.monitoring_time).toLocaleString()}
+                    </td>
+                </tr>
+            `).join('');
 
-    if (result.companies && result.companies.length > 0) {
-        tbody.innerHTML = result.companies.map(company => `
-            <tr class="border-b hover:bg-gray-50">
-                <td class="py-2">${company.company_name}</td>
-                <td class="py-2 text-sm text-gray-600">${company.credit_code || '-'}</td>
-                <td class="py-2">${company.reg_date || '-'}</td>
-                <td class="py-2">${company.reg_cap || '-'}</td>
-                <td class="py-2">${company.region_name || '-'}</td>
-                <td class="py-2 text-sm text-gray-600">
-                    ${new Date(company.monitoring_time).toLocaleString()}
-                </td>
-            </tr>
-        `).join('');
-
-        // Update pagination
-        updatePagination(result.total, offset);
-    } else {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无数据</td></tr>';
-    }
+            // Update pagination
+            updatePagination(result.total, offset);
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无数据</td></tr>';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading companies:', error);
+    });
 }
 
 function updatePagination(total, offset) {
