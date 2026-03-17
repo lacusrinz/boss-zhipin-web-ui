@@ -1,2 +1,78 @@
-.worktrees
+# Python 编译文件
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# 数据库文件
+data/boss_jobs.db
+data/boss_jobs.db-*
+data/boss_jobs.db_*
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# 敏感信息
 data/encryption_key
+data/*.key
+*.env
+.env.local
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日志文件
+*.log
+logs/
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+*.egg
+.pytest_cache/
+-wheelhouse/
+
+# PyInstaller
+*.spec
+*.manifest
+
+# 临时文件
+*.tmp
+*.bak
+*.backup
+*~
+
+# 其他
+.worktrees/
+code/data/
