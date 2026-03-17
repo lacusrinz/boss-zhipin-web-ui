@@ -45,7 +45,7 @@ class BOSSDatabase:
             self.conn = sqlite3.connect(str(self.db_path))
             self.cursor = self.conn.cursor()
             self.cursor.execute("PRAGMA foreign_keys = ON")
-            logging.info(f"数据库连接成功: {self.db_path}")
+            logging.debug(f"数据库连接成功: {self.db_path}")
             return True
         except Exception as e:
             logging.error(f"数据库连接失败: {e}")
@@ -55,7 +55,7 @@ class BOSSDatabase:
         """关闭数据库连接"""
         if self.conn:
             self.conn.close()
-            logging.info("数据库连接已关闭")
+            logging.debug("数据库连接已关闭")
 
     def init_tables(self):
         """初始化数据库表"""
@@ -953,7 +953,7 @@ class BOSSDatabase:
 
     def delete_monitoring_config(self, config_id: int) -> bool:
         """
-        Delete monitoring config
+        Delete monitoring config and all associated data
 
         Args:
             config_id: Configuration ID
@@ -962,8 +962,17 @@ class BOSSDatabase:
             bool: Success status
         """
         try:
+            # Delete in correct order due to foreign key constraints:
+            # 1. monitoring_runs (execution history)
+            # 2. monitored_companies (company data)
+            # 3. monitoring_configs (configuration)
+
+            self.cursor.execute("DELETE FROM monitoring_runs WHERE config_id = ?", (config_id,))
+            self.cursor.execute("DELETE FROM monitored_companies WHERE config_id = ?", (config_id,))
             self.cursor.execute("DELETE FROM monitoring_configs WHERE id = ?", (config_id,))
+
             self.conn.commit()
+            logging.info(f"Deleted monitoring config {config_id} and all associated data")
             return True
         except Exception as e:
             logging.error(f"Failed to delete monitoring config: {e}")
@@ -1086,6 +1095,89 @@ class BOSSDatabase:
         except Exception as e:
             logging.error(f"Failed to get monitoring stats: {e}")
             return {}
+
+    def insert_monitoring_run(self, config_id: int, config_name: str,
+                             success: bool, companies_added: int = 0,
+                             companies_skipped: int = 0,
+                             error_message: str = None) -> Optional[int]:
+        """
+        Insert a monitoring run record
+
+        Args:
+            config_id: Configuration ID
+            config_name: Configuration name
+            success: Whether the run was successful
+            companies_added: Number of companies added
+            companies_skipped: Number of companies skipped
+            error_message: Error message if failed
+
+        Returns:
+            int: Inserted record ID or None if failed
+        """
+        try:
+            self.cursor.execute("""
+                INSERT INTO monitoring_runs
+                (config_id, config_name, success, companies_added, companies_skipped, error_message)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (config_id, config_name, success, companies_added,
+                  companies_skipped, error_message))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Failed to insert monitoring run: {e}")
+            return None
+
+    def get_monitoring_runs(self, config_id: Optional[int] = None,
+                           limit: int = 50, offset: int = 0) -> list:
+        """
+        Get monitoring run records
+
+        Args:
+            config_id: Filter by config ID (optional)
+            limit: Number of records to return
+            offset: Pagination offset
+
+        Returns:
+            list: List of run records
+        """
+        try:
+            query = """
+                SELECT id, config_id, config_name, run_time, success,
+                       companies_added, companies_skipped, error_message
+                FROM monitoring_runs
+                WHERE 1=1
+            """
+            params = []
+
+            if config_id:
+                query += " AND config_id = ?"
+                params.append(config_id)
+
+            query += " ORDER BY run_time DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            columns = ['id', 'config_id', 'config_name', 'run_time',
+                      'success', 'companies_added', 'companies_skipped', 'error_message']
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logging.error(f"Failed to get monitoring runs: {e}")
+            return []
+
+    def get_monitoring_runs_count(self) -> int:
+        """
+        Get total count of monitoring runs
+
+        Returns:
+            int: Total count
+        """
+        try:
+            self.cursor.execute("SELECT COUNT(*) FROM monitoring_runs")
+            return self.cursor.fetchone()[0]
+        except Exception as e:
+            logging.error(f"Failed to get monitoring runs count: {e}")
+            return 0
 
 
 def main():
