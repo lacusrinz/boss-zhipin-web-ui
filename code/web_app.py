@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import List, Dict
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.pool import ThreadPoolExecutor
+import logging
 
 from database import BOSSDatabase
 from parsers import get_parser, get_supported_sites
@@ -33,6 +38,42 @@ else:
 DB_PATH = BASE_DIR / "data" / "boss_jobs.db"
 
 
+# ==================== Scheduler Setup ====================
+
+def setup_scheduler():
+    """
+    Setup APScheduler for background monitoring tasks
+    """
+    # Configure jobstore to persist jobs in database
+    jobstores = {
+        'default': SQLAlchemyJobStore(url=f'sqlite:///{DB_PATH}')
+    }
+
+    # Configure executors
+    executors = {
+        'default': ThreadPoolExecutor(max_workers=5)
+    }
+
+    # Configure job defaults
+    job_defaults = {
+        'coalesce': True,  # Combine missed jobs into one
+        'max_instances': 1,  # Only one instance of each job
+        'misfire_grace_time': 300  # Grace period for missed jobs
+    }
+
+    scheduler = BackgroundScheduler(
+        jobstores=jobstores,
+        executors=executors,
+        job_defaults=job_defaults,
+        timezone='Asia/Shanghai'
+    )
+
+    return scheduler
+
+# Initialize scheduler
+scheduler = setup_scheduler()
+
+
 # ==================== 数据库连接 ====================
 
 def get_db():
@@ -43,6 +84,8 @@ def get_db():
         db.init_tables()
         # 再添加 is_imported 列（如果需要升级旧数据库）
         db.add_is_imported_column()
+        # 初始化监控表（如果不存在）
+        db.init_monitoring_tables()
     return db
 
 
@@ -238,11 +281,100 @@ def main():
     # 确保数据库存在并初始化
     db = get_db()
     if db.conn:
+        db.init_monitoring_tables()  # Initialize monitoring tables
         db.close()
 
+    # Start scheduler
+    scheduler.start()
+    print("✅ 后台任务调度器已启动")
+
     # 启动 Flask 开发服务器
-    app.run(debug=True, host='127.0.0.1', port=5001)
+    try:
+        app.run(debug=True, host='127.0.0.1', port=5001, use_reloader=False)
+    finally:
+        scheduler.shutdown()
 
 
 if __name__ == '__main__':
     main()
+
+
+# ==================== Monitoring Job Management ====================
+
+def add_monitoring_job(config_id: int, interval_minutes: int):
+    """
+    Add a monitoring job to the scheduler
+
+    Args:
+        config_id: Monitoring configuration ID
+        interval_minutes: Interval in minutes
+    """
+    from riskbird_monitor import RiskBirdMonitor
+
+    job_id = f'monitoring_{config_id}'
+
+    def run_job():
+        db = get_db()
+        if db.conn:
+            try:
+                monitor = RiskBirdMonitor(db)
+                result = monitor.run_monitoring_task(config_id)
+                logging.info(f"Job {job_id} completed: {result}")
+            finally:
+                db.close()
+
+    scheduler.add_job(
+        func=run_job,
+        trigger=IntervalTrigger(minutes=interval_minutes),
+        id=job_id,
+        name=f'Monitoring Config {config_id}',
+        replace_existing=True
+    )
+
+    logging.info(f"Added monitoring job: {job_id} (interval: {interval_minutes} min)")
+
+def remove_monitoring_job(config_id: int):
+    """
+    Remove a monitoring job from the scheduler
+
+    Args:
+        config_id: Monitoring configuration ID
+    """
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.remove_job(job_id)
+        logging.info(f"Removed monitoring job: {job_id}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to remove job {job_id}: {e}")
+        return False
+
+def pause_monitoring_job(config_id: int):
+    """Pause a monitoring job"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.pause_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to pause job {job_id}: {e}")
+        return False
+
+def resume_monitoring_job(config_id: int):
+    """Resume a paused monitoring job"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.resume_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to resume job {job_id}: {e}")
+        return False
+
+def run_monitoring_job_now(config_id: int):
+    """Run a monitoring job immediately"""
+    job_id = f'monitoring_{config_id}'
+    try:
+        scheduler.run_job(job_id)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to run job {job_id}: {e}")
+        return False
