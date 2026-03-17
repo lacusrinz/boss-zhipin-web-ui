@@ -44,6 +44,7 @@ class BOSSDatabase:
         try:
             self.conn = sqlite3.connect(str(self.db_path))
             self.cursor = self.conn.cursor()
+            self.cursor.execute("PRAGMA foreign_keys = ON")
             logging.info(f"数据库连接成功: {self.db_path}")
             return True
         except Exception as e:
@@ -925,6 +926,13 @@ class BOSSDatabase:
         Returns:
             bool: Success status
         """
+        # Validate column names
+        ALLOWED_COLUMNS = {'config_name', 'region_codes', 'is_active', 'interval_minutes', 'reg_cap'}
+        invalid_columns = set(kwargs.keys()) - ALLOWED_COLUMNS
+        if invalid_columns:
+            logging.error(f"Invalid columns: {invalid_columns}")
+            return False
+
         try:
             if not kwargs:
                 return False
