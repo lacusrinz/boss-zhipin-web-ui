@@ -715,59 +715,76 @@ def update_monitoring_config(config_id):
         return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
 
     db = get_db()
-    if not db.conn:
-        return jsonify({'success': False, 'error': '数据库连接失败'})
+    try:
+        if not db.conn:
+            return jsonify({'success': False, 'error': '数据库连接失败'})
+        # Build update dict
+        updates = {}
+        if 'config_name' in data:
+            config_name = data['config_name'].strip() if data['config_name'] else None
+            # Convert empty string to None
+            if config_name and config_name.strip():
+                updates['config_name'] = config_name
 
-    # Build update dict
-    updates = {}
-    if 'config_name' in data:
-        updates['config_name'] = data['config_name']
-    if 'region_codes' in data:
-        import json
-        updates['region_codes'] = json.dumps(data['region_codes'])
-    if 'interval_minutes' in data:
-        updates['interval_minutes'] = data['interval_minutes']
-    if 'reg_cap' in data:
-        updates['reg_cap'] = data['reg_cap']
+        if 'region_codes' in data:
+            import json
+            updates['region_codes'] = json.dumps(data['region_codes'])
 
-    # Handle time range fields with validation
-    monitoring_start_time = None
-    monitoring_end_time = None
+        if 'interval_minutes' in data:
+            updates['interval_minutes'] = data['interval_minutes']
 
-    if 'monitoring_start_time' in data:
-        monitoring_start_time = data['monitoring_start_time'].strip() if data['monitoring_start_time'] else None
-        if monitoring_start_time:
-            # Validate time format
-            if not validate_time_format(monitoring_start_time):
-                return jsonify({'success': False, 'error': '监控开始时间格式无效，请使用HH:MM格式（例如：09:00）'}), 400
-            updates['monitoring_start_time'] = monitoring_start_time
+        if 'reg_cap' in data:
+            reg_cap = data['reg_cap'].strip() if data['reg_cap'] else None
+            # Convert empty string to None
+            if reg_cap and reg_cap.strip():
+                updates['reg_cap'] = reg_cap
 
-    if 'monitoring_end_time' in data:
-        monitoring_end_time = data['monitoring_end_time'].strip() if data['monitoring_end_time'] else None
-        if monitoring_end_time:
-            # Validate time format
-            if not validate_time_format(monitoring_end_time):
-                return jsonify({'success': False, 'error': '监控结束时间格式无效，请使用HH:MM格式（例如：18:00）'}), 400
-            updates['monitoring_end_time'] = monitoring_end_time
+        # Handle time range fields with validation
+        monitoring_start_time = None
+        monitoring_end_time = None
 
-    # Validate time range if both times are provided
-    if monitoring_start_time and monitoring_end_time:
-        if not validate_time_range(monitoring_start_time, monitoring_end_time):
-            return jsonify({'success': False, 'error': '监控时间范围无效：结束时间必须晚于开始时间（不支持跨天）'}), 400
+        if 'monitoring_start_time' in data:
+            monitoring_start_time = data['monitoring_start_time'].strip() if data['monitoring_start_time'] else None
+            # Convert empty string to None
+            if monitoring_start_time and monitoring_start_time.strip():
+                # Validate time format
+                if not validate_time_format(monitoring_start_time):
+                    return jsonify({'success': False, 'error': '监控开始时间格式无效，请使用HH:MM格式（例如：09:00）'}), 400
+                updates['monitoring_start_time'] = monitoring_start_time
+            else:
+                monitoring_start_time = None
 
-    success = db.update_monitoring_config(config_id, **updates)
+        if 'monitoring_end_time' in data:
+            monitoring_end_time = data['monitoring_end_time'].strip() if data['monitoring_end_time'] else None
+            # Convert empty string to None
+            if monitoring_end_time and monitoring_end_time.strip():
+                # Validate time format
+                if not validate_time_format(monitoring_end_time):
+                    return jsonify({'success': False, 'error': '监控结束时间格式无效，请使用HH:MM格式（例如：18:00）'}), 400
+                updates['monitoring_end_time'] = monitoring_end_time
+            else:
+                monitoring_end_time = None
 
-    if success and 'interval_minutes' in updates:
-        # Update job schedule
-        remove_monitoring_job(config_id)
-        add_monitoring_job(config_id, updates['interval_minutes'])
+        # Validate time range if both times are provided
+        if monitoring_start_time and monitoring_end_time:
+            if not validate_time_range(monitoring_start_time, monitoring_end_time):
+                return jsonify({'success': False, 'error': '监控时间范围无效：结束时间必须晚于开始时间（不支持跨天）'}), 400
 
-    db.close()
+        success = db.update_monitoring_config(config_id, **updates)
 
-    if success:
-        return jsonify({'success': True, 'message': '配置已更新'})
-    else:
-        return jsonify({'success': False, 'error': '更新配置失败'})
+        if success and 'interval_minutes' in updates:
+            # Update job schedule
+            remove_monitoring_job(config_id)
+            add_monitoring_job(config_id, updates['interval_minutes'])
+
+        if success:
+            return jsonify({'success': True, 'message': '配置已更新'})
+        else:
+            return jsonify({'success': False, 'error': '更新配置失败'})
+
+    finally:
+        # Always close database connection, even on early returns
+        db.close()
 
 
 @app.route('/api/monitoring/configs/<int:config_id>', methods=['DELETE'])
