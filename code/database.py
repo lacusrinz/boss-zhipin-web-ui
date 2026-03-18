@@ -1114,7 +1114,7 @@ class BOSSDatabase:
                     mc.contact,
                     mc.address,
                     mc.business_scope,
-                    mc.monitoring_time,
+                    datetime(mc.monitoring_time, '+8 hours') as monitoring_time,
                     mc.source,
                     mc.is_processed,
                     mc.notes
