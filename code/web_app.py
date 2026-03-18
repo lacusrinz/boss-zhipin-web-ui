@@ -21,6 +21,10 @@ import logging
 
 from database import BOSSDatabase
 from parsers import get_parser, get_supported_sites
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 创建 Flask 应用
 app = Flask(__name__)
@@ -107,6 +111,7 @@ def run_monitoring_task_wrapper(config_id: int):
     # Deferred import to avoid circular dependency with riskbird_monitor module
     # which imports from database and riskbird_search
     from riskbird_monitor import RiskBirdMonitor
+    from feishu_service import FeishuService
 
     job_id = f'monitoring_{config_id}'
     db = get_db()
@@ -132,7 +137,7 @@ def run_monitoring_task_wrapper(config_id: int):
 
             # Record the run before closing connection
             config_name = config['config_name'] if config else f'Config {config_id}'
-            db.insert_monitoring_run(
+            run_id = db.insert_monitoring_run(
                 config_id=config_id,
                 config_name=config_name,
                 success=result['success'],
@@ -140,8 +145,89 @@ def run_monitoring_task_wrapper(config_id: int):
                 companies_skipped=result['companies_skipped'],
                 error_message=result.get('error')
             )
+
+            # NEW: Send Feishu notification when new companies found
+            if result['success'] and result['companies_added'] > 0 and config:
+                if config.get('feishu_enabled'):
+                    _send_feishu_notification(db, config, result, run_id)
         finally:
             db.close()
+
+def _send_feishu_notification(db, config: Dict, result: Dict, run_id: int = None):
+    """
+    发送飞书通知
+
+    Args:
+        db: 数据库连接
+        config: 监测配置
+        result: 监测结果
+        run_id: 执行记录 ID（可选）
+    """
+    import os
+    from feishu_service import FeishuService
+
+    try:
+        # 从环境变量获取飞书凭证
+        app_id = os.getenv('FEISHU_APP_ID')
+        app_secret = os.getenv('FEISHU_APP_SECRET')
+
+        if not app_id or not app_secret:
+            logging.warning("飞书凭证未配置，跳过推送")
+            return
+
+        # 初始化飞书服务
+        feishu = FeishuService(app_id, app_secret)
+
+        # 获取新添加的企业
+        companies = db.get_monitored_companies(
+            config_id=config['id'],
+            limit=result['companies_added']
+        )
+
+        if not companies:
+            logging.warning("未找到企业数据，跳过推送")
+            return
+
+        # 格式化消息
+        content = feishu.format_monitoring_notification(
+            companies, config['config_name']
+        )
+
+        # 发送消息
+        send_result = feishu.send_text_message(
+            target_id=config['feishu_target_id'],
+            target_type=config['feishu_target_type'],
+            content=content
+        )
+
+        # 记录日志
+        if 'error' in send_result:
+            logging.error(f"飞书推送失败: {send_result['error']}")
+            db.insert_feishu_push_log(
+                config_id=config['id'],
+                company_count=result['companies_added'],
+                success=False,
+                error_message=send_result['error']
+            )
+        else:
+            logging.info(f"飞书推送成功: {result['companies_added']} 家企业")
+            db.insert_feishu_push_log(
+                config_id=config['id'],
+                company_count=result['companies_added'],
+                success=True
+            )
+
+    except Exception as e:
+        logging.error(f"飞书推送异常: {e}")
+        try:
+            db.insert_feishu_push_log(
+                config_id=config['id'],
+                company_count=result['companies_added'],
+                success=False,
+                error_message=str(e)
+            )
+        except:
+            pass  # 避免日志记录失败影响主流程
 
 def add_monitoring_job(config_id: int, interval_minutes: int):
     """
@@ -650,6 +736,11 @@ def create_monitoring_config():
     monitoring_start_time = data.get('monitoring_start_time', '09:00').strip()
     monitoring_end_time = data.get('monitoring_end_time', '18:00').strip()
 
+    # NEW: Feishu parameters
+    feishu_enabled = data.get('feishu_enabled', False)
+    feishu_target_type = data.get('feishu_target_type', '').strip()
+    feishu_target_id = data.get('feishu_target_id', '').strip()
+
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
 
@@ -691,6 +782,15 @@ def create_monitoring_config():
         if not config_id:
             db.close()
             return jsonify({'success': False, 'error': '创建配置失败: 数据库插入返回None'}), 500
+
+        # NEW: Update Feishu settings if enabled
+        if feishu_enabled:
+            db.update_monitoring_config_feishu(
+                config_id=config_id,
+                feishu_enabled=True,
+                feishu_target_type=feishu_target_type if feishu_target_type else None,
+                feishu_target_id=feishu_target_id if feishu_target_id else None
+            )
 
         # Add job to scheduler
         job_added = add_monitoring_job(config_id, interval_minutes)
@@ -1032,6 +1132,53 @@ def main():
         app.run(debug=False, host='127.0.0.1', port=5001)
     finally:
         scheduler.shutdown()
+
+
+@app.route('/api/monitoring/feishu/test', methods=['POST'])
+def test_feishu_message():
+    """Test Feishu message sending"""
+    import os
+    from feishu_service import FeishuService
+
+    data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
+
+    target_type = data.get('target_type', '').strip()
+    target_id = data.get('target_id', '').strip()
+
+    if not target_type or not target_id:
+        return jsonify({'success': False, 'error': '缺少必要参数'}), 400
+
+    if target_type not in ['group', 'user']:
+        return jsonify({'success': False, 'error': '目标类型必须是 group 或 user'}), 400
+
+    try:
+        # 从环境变量获取飞书凭证
+        app_id = os.getenv('FEISHU_APP_ID')
+        app_secret = os.getenv('FEISHU_APP_SECRET')
+
+        if not app_id or not app_secret:
+            return jsonify({'success': False, 'error': '飞书凭证未配置，请检查环境变量'}), 500
+
+        feishu = FeishuService(app_id, app_secret)
+
+        content = """🧪 测试消息
+
+这是一条来自企业监测系统的测试消息。
+
+如果你收到这条消息，说明飞书推送配置正确！"""
+
+        result = feishu.send_text_message(target_id, target_type, content)
+
+        if 'error' in result:
+            return jsonify({'success': False, 'error': result['error']})
+
+        return jsonify({'success': True, 'message': '测试消息已发送'})
+
+    except Exception as e:
+        logging.error(f"测试飞书消息失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':
