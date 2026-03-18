@@ -463,6 +463,45 @@ class BOSSDatabase:
             logging.error(f"添加 is_discarded 列失败: {e}")
             return False
 
+    def add_monitoring_time_columns(self):
+        """
+        为现有的 monitoring_configs 表添加时间范围列
+        用于数据库升级
+        """
+        try:
+            # 检查列是否已存在
+            self.cursor.execute("PRAGMA table_info(monitoring_configs)")
+            columns = [col[1] for col in self.cursor.fetchall()]
+
+            columns_added = False
+
+            if 'monitoring_start_time' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs ADD COLUMN monitoring_start_time TEXT DEFAULT '09:00'
+                """)
+                columns_added = True
+                logging.info("已添加 monitoring_start_time 列到 monitoring_configs 表")
+            else:
+                logging.info("monitoring_start_time 列已存在，无需添加")
+
+            if 'monitoring_end_time' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs ADD COLUMN monitoring_end_time TEXT DEFAULT '18:00'
+                """)
+                columns_added = True
+                logging.info("已添加 monitoring_end_time 列到 monitoring_configs 表")
+            else:
+                logging.info("monitoring_end_time 列已存在，无需添加")
+
+            if columns_added:
+                self.conn.commit()
+
+            return True
+
+        except Exception as e:
+            logging.error(f"添加监控时间列失败: {e}")
+            return False
+
     def toggle_company_imported(self, company_id: int) -> Optional[bool]:
         """
         切换企业入库状态
