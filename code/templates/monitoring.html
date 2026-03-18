@@ -392,6 +392,28 @@
 
     <!-- Monitoring Runs Table -->
     <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <!-- 执行记录日期筛选 -->
+        <div class="flex items-center gap-4 mb-4" id="runs-filter-container">
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">开始日期:</label>
+                <input type="date" id="runs-start-date"
+                       class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">结束日期:</label>
+                <input type="date" id="runs-end-date"
+                       class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button onclick="applyRunsFilter()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors">
+                筛选
+            </button>
+            <button onclick="resetRunsFilter()"
+                    class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 transition-colors">
+                重置
+            </button>
+        </div>
+
         <h2 class="text-xl font-semibold mb-4">执行记录</h2>
 
         <div class="overflow-x-auto">
@@ -831,7 +853,14 @@ const runsLimit = 10;
 
 async function loadRuns(offset = 0) {
     runsCurrentOffset = offset;
-    fetch(`/api/monitoring/runs?limit=${runsLimit}&offset=${offset}`)
+    const startDate = document.getElementById('runs-start-date')?.value;
+    const endDate = document.getElementById('runs-end-date')?.value;
+
+    let url = `/api/monitoring/runs?limit=${runsLimit}&offset=${offset}`;
+    if (startDate) url += `&start_date=${startDate}`;
+    if (endDate) url += `&end_date=${endDate}`;
+
+    fetch(url)
     .then(response => {
         if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -887,6 +916,26 @@ function updateRunsPagination(total, offset) {
     }
 
     container.innerHTML = html;
+}
+
+// 执行记录筛选函数
+function applyRunsFilter() {
+    const startDate = document.getElementById('runs-start-date').value;
+    const endDate = document.getElementById('runs-end-date').value;
+
+    // 验证日期范围
+    if (startDate && endDate && startDate > endDate) {
+        alert('结束日期不能早于开始日期');
+        return;
+    }
+
+    loadRuns(0); // 重置到第一页
+}
+
+function resetRunsFilter() {
+    document.getElementById('runs-start-date').value = '';
+    document.getElementById('runs-end-date').value = '';
+    loadRuns(0);
 }
 
 let currentOffset = 0;
@@ -945,6 +994,11 @@ function updatePagination(total, offset) {
 
 // Initial load
 document.addEventListener('DOMContentLoaded', () => {
+    // 设置执行记录默认日期为今天
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('runs-start-date').value = today;
+    document.getElementById('runs-end-date').value = today;
+
     loadJobs();
     loadStats();
     loadRuns();
