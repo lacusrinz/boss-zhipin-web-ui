@@ -6,6 +6,7 @@ Flask Web 应用，提供 HTML 粘贴、岗位展示、企业清单管理功能
 """
 
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
@@ -481,6 +482,38 @@ def batch_import():
 
 # ==================== Monitoring API Endpoints ====================
 
+def validate_time_format(time_str: str) -> bool:
+    """
+    Check if time string is in valid HH:MM format.
+
+    Args:
+        time_str: Time string to validate
+
+    Returns:
+        True if valid HH:MM format (00:00-23:59), False otherwise
+    """
+    if not time_str:
+        return False
+    pattern = r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'
+    return bool(re.match(pattern, time_str))
+
+
+def validate_time_range(start: str, end: str) -> bool:
+    """
+    Check if time range is valid (start < end, no cross-day).
+
+    Args:
+        start: Start time in HH:MM format
+        end: End time in HH:MM format
+
+    Returns:
+        True if valid range (start < end), False if cross-day or equal
+    """
+    if not start or not end:
+        return False
+    return start < end
+
+
 @app.route('/api/monitoring/token', methods=['GET'])
 def get_token_config():
     """Get RiskBird token configuration (masked)"""
@@ -613,6 +646,10 @@ def create_monitoring_config():
     interval_minutes = data.get('interval_minutes', 5)
     reg_cap = data.get('reg_cap', '').strip()
 
+    # Extract time range parameters with defaults
+    monitoring_start_time = data.get('monitoring_start_time', '09:00').strip()
+    monitoring_end_time = data.get('monitoring_end_time', '18:00').strip()
+
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
 
@@ -621,6 +658,17 @@ def create_monitoring_config():
 
     if not isinstance(interval_minutes, int) or not (1 <= interval_minutes <= 1440):
         return jsonify({'success': False, 'error': '监控间隔必须在1-1440分钟之间'}), 400
+
+    # Validate time format
+    if not validate_time_format(monitoring_start_time):
+        return jsonify({'success': False, 'error': '监控开始时间格式无效，请使用HH:MM格式（例如：09:00）'}), 400
+
+    if not validate_time_format(monitoring_end_time):
+        return jsonify({'success': False, 'error': '监控结束时间格式无效，请使用HH:MM格式（例如：18:00）'}), 400
+
+    # Validate time range (no cross-day)
+    if not validate_time_range(monitoring_start_time, monitoring_end_time):
+        return jsonify({'success': False, 'error': '监控时间范围无效：结束时间必须晚于开始时间（不支持跨天）'}), 400
 
     db = get_db()
     if not db.conn:
@@ -635,7 +683,9 @@ def create_monitoring_config():
             config_name=config_name,
             region_codes=region_codes_json,
             interval_minutes=interval_minutes,
-            reg_cap=reg_cap if reg_cap else None
+            reg_cap=reg_cap if reg_cap else None,
+            monitoring_start_time=monitoring_start_time,
+            monitoring_end_time=monitoring_end_time
         )
 
         if not config_id:
