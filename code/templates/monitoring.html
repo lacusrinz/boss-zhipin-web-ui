@@ -475,16 +475,15 @@
                     <tr class="border-b">
                         <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">企业名称</th>
                         <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">信用代码</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">地区</th>
                         <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">注册资本</th>
                         <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">法定代表人</th>
-                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">监测时间</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">监测时间 (北京时间)</th>
                         <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">配置名称</th>
                     </tr>
                 </thead>
                 <tbody id="companies-table">
                     <tr>
-                        <td colspan="7" class="text-center py-4 text-gray-500">
+                        <td colspan="6" class="text-center py-4 text-gray-500">
                             加载中...
                         </td>
                     </tr>
@@ -1010,7 +1009,6 @@ async function loadCompanies(offset = 0) {
                 <tr class="hover:bg-gray-50 border-b border-gray-200">
                     <td class="px-4 py-3 text-sm">${company.company_name || '-'}</td>
                     <td class="px-4 py-3 text-sm">${company.credit_code || '-'}</td>
-                    <td class="px-4 py-3 text-sm">${company.region_name || '-'}</td>
                     <td class="px-4 py-3 text-sm">${company.reg_cap || '-'}</td>
                     <td class="px-4 py-3 text-sm">${company.legal_representative || '-'}</td>
                     <td class="px-4 py-3 text-sm">${company.monitoring_time || '-'}</td>
@@ -1023,7 +1021,7 @@ async function loadCompanies(offset = 0) {
             // Update pagination
             updatePagination(result.total, offset);
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">暂无监测结果</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无监测结果</td></tr>';
         }
     })
     .catch(error => {
