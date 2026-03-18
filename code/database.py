@@ -956,6 +956,7 @@ class BOSSDatabase:
             self.cursor.execute("""
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
+                       feishu_enabled, feishu_target_type, feishu_target_id,
                        created_at, updated_at
                 FROM monitoring_configs
                 WHERE id = ?
@@ -964,6 +965,7 @@ class BOSSDatabase:
             if row:
                 columns = ['id', 'config_name', 'region_codes', 'is_active',
                           'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
+                          'feishu_enabled', 'feishu_target_type', 'feishu_target_id',
                           'created_at', 'updated_at']
                 return dict(zip(columns, row))
             return None
@@ -1007,6 +1009,66 @@ class BOSSDatabase:
         except Exception as e:
             logging.error(f"Failed to update monitoring config: {e}")
             return False
+
+    def update_monitoring_config_feishu(self, config_id: int, feishu_enabled: bool,
+                                       feishu_target_type: str = None,
+                                       feishu_target_id: str = None) -> bool:
+        """
+        更新监测配置的飞书推送设置
+
+        Args:
+            config_id: 监测配置 ID
+            feishu_enabled: 是否启用飞书推送
+            feishu_target_type: 目标类型 ('group' 或 'user')
+            feishu_target_id: 目标 ID
+
+        Returns:
+            bool: 更新是否成功
+        """
+        try:
+            self.cursor.execute("""
+                UPDATE monitoring_configs
+                SET feishu_enabled = ?,
+                    feishu_target_type = ?,
+                    feishu_target_id = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (1 if feishu_enabled else 0, feishu_target_type, feishu_target_id, config_id))
+
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"更新飞书配置失败: {e}")
+            self.conn.rollback()
+            return False
+
+    def insert_feishu_push_log(self, config_id: int, company_count: int,
+                               success: bool, error_message: str = None) -> int:
+        """
+        插入飞书推送日志
+
+        Args:
+            config_id: 监测配置 ID
+            company_count: 企业数量
+            success: 是否成功
+            error_message: 错误信息（可选）
+
+        Returns:
+            int: 插入记录的 ID，失败返回 None
+        """
+        try:
+            self.cursor.execute("""
+                INSERT INTO feishu_push_logs
+                (config_id, company_count, success, error_message)
+                VALUES (?, ?, ?, ?)
+            """, (config_id, company_count, 1 if success else 0, error_message))
+
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"插入飞书推送日志失败: {e}")
+            self.conn.rollback()
+            return None
 
     def delete_monitoring_config(self, config_id: int) -> bool:
         """
