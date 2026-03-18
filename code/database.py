@@ -1081,41 +1081,71 @@ class BOSSDatabase:
             logging.error(f"Failed to insert monitored company: {e}")
             return None
 
-    def get_monitored_companies(self, config_id: int = None, limit: int = 100,
-                                offset: int = 0) -> List[Dict]:
+    def get_monitored_companies(self, config_id: int = None,
+                               start_date: Optional[str] = None,
+                               end_date: Optional[str] = None,
+                               limit: int = 100, offset: int = 0) -> List[Dict]:
         """
-        Get monitored companies with pagination
+        Get monitored companies with date filtering and config name
 
         Args:
             config_id: Filter by config ID (optional)
-            limit: Number of results
+            start_date: Filter by start date (YYYY-MM-DD format)
+            end_date: Filter by end date (YYYY-MM-DD format)
+            limit: Number of records to return
             offset: Pagination offset
 
         Returns:
-            list: List of company dicts
+            List[Dict]: List of monitored companies with config_name
         """
         try:
             query = """
-                SELECT id, config_id, company_name, credit_code, reg_date,
-                       reg_cap, region_code, region_name, monitoring_time,
-                       is_processed, source
-                FROM monitored_companies
+                SELECT
+                    mc.id,
+                    mc.config_id,
+                    mc2.config_name,
+                    mc.company_name,
+                    mc.credit_code,
+                    mc.reg_date,
+                    mc.reg_cap,
+                    mc.region_code,
+                    mc.region_name,
+                    mc.legal_representative,
+                    mc.contact,
+                    mc.address,
+                    mc.business_scope,
+                    mc.monitoring_time,
+                    mc.source,
+                    mc.is_processed,
+                    mc.notes
+                FROM monitored_companies mc
+                LEFT JOIN monitoring_configs mc2 ON mc.config_id = mc2.id
                 WHERE 1=1
             """
             params = []
 
             if config_id:
-                query += " AND config_id = ?"
+                query += " AND mc.config_id = ?"
                 params.append(config_id)
 
-            query += " ORDER BY monitoring_time DESC LIMIT ? OFFSET ?"
+            # Add date filtering
+            if start_date:
+                query += " AND DATE(mc.monitoring_time) >= ?"
+                params.append(start_date)
+
+            if end_date:
+                query += " AND DATE(mc.monitoring_time) <= ?"
+                params.append(end_date)
+
+            query += " ORDER BY mc.monitoring_time DESC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             self.cursor.execute(query, params)
             rows = self.cursor.fetchall()
-            columns = ['id', 'config_id', 'company_name', 'credit_code', 'reg_date',
-                      'reg_cap', 'region_code', 'region_name', 'monitoring_time',
-                      'is_processed', 'source']
+            columns = ['id', 'config_id', 'config_name', 'company_name', 'credit_code',
+                      'reg_date', 'reg_cap', 'region_code', 'region_name',
+                      'legal_representative', 'contact', 'address', 'business_scope',
+                      'monitoring_time', 'source', 'is_processed', 'notes']
             return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
             logging.error(f"Failed to get monitored companies: {e}")
