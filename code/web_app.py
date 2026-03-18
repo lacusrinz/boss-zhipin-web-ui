@@ -892,8 +892,10 @@ def run_monitoring_job_now_endpoint(config_id):
 
 @app.route('/api/monitoring/companies', methods=['GET'])
 def get_monitored_companies():
-    """Get monitored companies with pagination"""
+    """Get monitored companies with pagination and date filtering"""
     config_id = request.args.get('config_id', type=int)
+    start_date = request.args.get('start_date', type=str)  # 新增
+    end_date = request.args.get('end_date', type=str)      # 新增
     limit = request.args.get('limit', 50, type=int)
     offset = request.args.get('offset', 0, type=int)
 
@@ -903,6 +905,8 @@ def get_monitored_companies():
 
     companies = db.get_monitored_companies(
         config_id=config_id,
+        start_date=start_date,  # 新增
+        end_date=end_date,      # 新增
         limit=limit,
         offset=offset
     )
