@@ -112,12 +112,24 @@ def run_monitoring_task_wrapper(config_id: int):
 
     if db.conn:
         try:
+            # Get monitoring config to check time range
+            config = db.get_monitoring_config(config_id)
+
+            # Check if current time is within monitoring time range
+            if config:
+                monitoring_start_time = config.get('monitoring_start_time')
+                monitoring_end_time = config.get('monitoring_end_time')
+
+                # Check if current time is within range
+                if not is_within_monitoring_hours(monitoring_start_time, monitoring_end_time):
+                    logging.info(f"[{get_beijing_time_str()}] Job {job_id} skipped: outside monitoring hours ({monitoring_start_time} - {monitoring_end_time})")
+                    return
+
             monitor = RiskBirdMonitor(db)
             result = monitor.run_monitoring_task(config_id)
-            logging.info(f"Job {job_id} completed: {result}")
+            logging.info(f"[{get_beijing_time_str()}] Job {job_id} completed: {result}")
 
             # Record the run before closing connection
-            config = db.get_monitoring_config(config_id)
             config_name = config['config_name'] if config else f'Config {config_id}'
             db.insert_monitoring_run(
                 config_id=config_id,
