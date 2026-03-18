@@ -75,3 +75,4 @@ build/
 # 其他
 .worktrees/
 code/data/
+.env
