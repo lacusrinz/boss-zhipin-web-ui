@@ -346,6 +346,64 @@
                     </div>
                 </div>
 
+                <!-- 飞书消息推送配置 -->
+                <div class="border-t pt-4 mt-4">
+                    <h3 class="text-lg font-medium mb-3">📱 飞书消息推送（可选）</h3>
+
+                    <div class="mb-3">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" name="feishu_enabled" id="feishu-enabled"
+                                   class="rounded" onchange="toggleFeishuFields()">
+                            <span class="text-sm font-medium">启用飞书消息推送</span>
+                        </label>
+                        <div class="text-xs text-gray-500 ml-6 mt-1">
+                            当监测到新企业时，自动发送消息到飞书
+                        </div>
+                    </div>
+
+                    <div id="feishu-fields" class="hidden space-y-3 pl-6">
+                        <!-- 目标类型选择 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                推送目标类型
+                            </label>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="feishu_target_type" value="group" checked>
+                                    <span class="text-sm">群聊</span>
+                                </label>
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="feishu_target_type" value="user">
+                                    <span class="text-sm">私聊（个人）</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 目标 ID 输入 -->
+                        <div>
+                            <label for="feishu-target-id" class="block text-sm font-medium text-gray-700 mb-1">
+                                群聊 ID / 用户 open_id
+                            </label>
+                            <input type="text" name="feishu_target_id" id="feishu-target-id"
+                                   class="w-full border rounded px-3 py-2 text-sm"
+                                   placeholder="如: oc_xxxxxxxxxxxxxxxxxxxx">
+                            <div class="text-xs text-gray-500 mt-1">
+                                如何获取 ID:
+                                <a href="https://open.feishu.cn/document/ukTMukTMukTM/uUTNz4SN1MjL1UzM"
+                                   target="_blank" class="text-blue-600 hover:underline">
+                                    查看飞书文档
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 测试按钮 -->
+                        <button type="button" id="test-feishu-btn"
+                                class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">
+                            🧪 发送测试消息
+                        </button>
+                    </div>
+                </div>
+
                 <div class="flex space-x-4">
                     <button type="submit"
                             class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
@@ -628,6 +686,53 @@ function validateTimeRange() {
     return true;
 }
 
+// 切换飞书字段显示
+function toggleFeishuFields() {
+    const enabled = document.getElementById('feishu-enabled').checked;
+    const fields = document.getElementById('feishu-fields');
+    fields.classList.toggle('hidden', !enabled);
+}
+
+// 飞书测试消息
+document.getElementById('test-feishu-btn').addEventListener('click', async () => {
+    const targetType = document.querySelector('input[name="feishu_target_type"]:checked').value;
+    const targetId = document.getElementById('feishu-target-id').value;
+
+    if (!targetId) {
+        alert('请先输入群聊 ID 或用户 open_id');
+        return;
+    }
+
+    const btn = document.getElementById('test-feishu-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+
+    try {
+        const response = await fetch('/api/monitoring/feishu/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                target_type: targetType,
+                target_id: targetId
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('✅ 测试消息发送成功！请检查飞书是否收到。');
+        } else {
+            alert('❌ 发送失败: ' + result.error);
+        }
+    } catch (error) {
+        alert('请求失败: ' + error);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+});
+
 // Monitoring Configuration
 document.getElementById('monitoring-config-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -658,7 +763,12 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         interval_minutes: parseInt(formData.get('interval_minutes')),
         reg_cap: reg_cap,
         monitoring_start_time: formData.get('monitoring_start_time'),
-        monitoring_end_time: formData.get('monitoring_end_time')
+        monitoring_end_time: formData.get('monitoring_end_time'),
+
+        // 飞书设置
+        feishu_enabled: document.getElementById('feishu-enabled').checked,
+        feishu_target_type: formData.get('feishu_target_type'),
+        feishu_target_id: formData.get('feishu_target_id')
     };
 
     const btn = e.target.querySelector('button[type="submit"]');
