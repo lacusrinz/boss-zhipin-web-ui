@@ -305,12 +305,12 @@
                     <div class="time-range-inputs">
                         <div class="time-input-group">
                             <label for="start-time-input">开始时间</label>
-                            <input type="time" name="start_time" id="start-time-input" value="09:00">
+                            <input type="time" name="monitoring_start_time" id="start-time-input" value="09:00">
                         </div>
                         <div class="separator">至</div>
                         <div class="time-input-group">
                             <label for="end-time-input">结束时间</label>
-                            <input type="time" name="end_time" id="end-time-input" value="18:00">
+                            <input type="time" name="monitoring_end_time" id="end-time-input" value="18:00">
                         </div>
                     </div>
                     <div class="time-range-help">监测任务将在该时间段内执行，其他时间暂停</div>
@@ -613,8 +613,8 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         region_codes: regionCodes,
         interval_minutes: parseInt(formData.get('interval_minutes')),
         reg_cap: reg_cap,
-        start_time: formData.get('start_time'),
-        end_time: formData.get('end_time')
+        monitoring_start_time: formData.get('monitoring_start_time'),
+        monitoring_end_time: formData.get('monitoring_end_time')
     };
 
     const btn = e.target.querySelector('button[type="submit"]');
@@ -695,8 +695,8 @@ async function loadJobs() {
             container.innerHTML = result.jobs.map(job => {
                 // Format time range for display
                 let timeRangeDisplay = '全天';
-                if (job.start_time && job.end_time) {
-                    timeRangeDisplay = `${job.start_time} - ${job.end_time}`;
+                if (job.monitoring_start_time && job.monitoring_end_time) {
+                    timeRangeDisplay = `${job.monitoring_start_time} - ${job.monitoring_end_time}`;
                 }
 
                 return `
