@@ -445,20 +445,46 @@
 
     <!-- Companies Table -->
     <div class="bg-white rounded-lg shadow p-6">
+        <!-- 监测结果日期筛选 -->
+        <div class="flex items-center gap-4 mb-4" id="results-filter-container">
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">开始日期:</label>
+                <input type="date" id="results-start-date"
+                       class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">结束日期:</label>
+                <input type="date" id="results-end-date"
+                       class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button onclick="applyResultsFilter()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors">
+                筛选
+            </button>
+            <button onclick="resetResultsFilter()"
+                    class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 transition-colors">
+                重置
+            </button>
+        </div>
+
         <h2 class="text-xl font-semibold mb-4">监测结果</h2>
 
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead>
                     <tr class="border-b">
-                        <th class="text-left py-2">企业名称</th>
-                        <th class="text-left py-2">信用代码</th>
-                        <th class="text-left py-2">注册资本</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">企业名称</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">信用代码</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">地区</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">注册资本</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">法定代表人</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">监测时间</th>
+                        <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">配置名称</th>
                     </tr>
                 </thead>
                 <tbody id="companies-table">
                     <tr>
-                        <td colspan="3" class="text-center py-4 text-gray-500">
+                        <td colspan="7" class="text-center py-4 text-gray-500">
                             加载中...
                         </td>
                     </tr>
@@ -938,12 +964,39 @@ function resetRunsFilter() {
     loadRuns(0);
 }
 
+// 监测结果筛选函数
+function applyResultsFilter() {
+    const startDate = document.getElementById('results-start-date').value;
+    const endDate = document.getElementById('results-end-date').value;
+
+    // 验证日期范围
+    if (startDate && endDate && startDate > endDate) {
+        alert('结束日期不能早于开始日期');
+        return;
+    }
+
+    loadCompanies(0); // 重置到第一页
+}
+
+function resetResultsFilter() {
+    document.getElementById('results-start-date').value = '';
+    document.getElementById('results-end-date').value = '';
+    loadCompanies(0);
+}
+
 let currentOffset = 0;
-const limit = 20;
+const limit = 50;
 
 async function loadCompanies(offset = 0) {
     currentOffset = offset;
-    fetch(`/api/monitoring/companies?limit=${limit}&offset=${offset}`)
+    const startDate = document.getElementById('results-start-date')?.value;
+    const endDate = document.getElementById('results-end-date')?.value;
+
+    let url = `/api/monitoring/companies?limit=${limit}&offset=${offset}`;
+    if (startDate) url += `&start_date=${startDate}`;
+    if (endDate) url += `&end_date=${endDate}`;
+
+    fetch(url)
     .then(response => {
         if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -954,17 +1007,23 @@ async function loadCompanies(offset = 0) {
         const tbody = document.getElementById('companies-table');
         if (result.companies && result.companies.length > 0) {
             tbody.innerHTML = result.companies.map(company => `
-                <tr class="border-b hover:bg-gray-50">
-                    <td class="py-2">${company.company_name}</td>
-                    <td class="py-2 text-sm text-gray-600">${company.credit_code || '-'}</td>
-                    <td class="py-2">${company.reg_cap || '-'}</td>
+                <tr class="hover:bg-gray-50 border-b border-gray-200">
+                    <td class="px-4 py-3 text-sm">${company.company_name || '-'}</td>
+                    <td class="px-4 py-3 text-sm">${company.credit_code || '-'}</td>
+                    <td class="px-4 py-3 text-sm">${company.region_name || '-'}</td>
+                    <td class="px-4 py-3 text-sm">${company.reg_cap || '-'}</td>
+                    <td class="px-4 py-3 text-sm">${company.legal_representative || '-'}</td>
+                    <td class="px-4 py-3 text-sm">${company.monitoring_time || '-'}</td>
+                    <td class="px-4 py-3 text-sm">
+                        ${company.config_name || '<span class="text-gray-400">已删除</span>'}
+                    </td>
                 </tr>
             `).join('');
 
             // Update pagination
             updatePagination(result.total, offset);
         } else {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">暂无监测结果</td></tr>';
         }
     })
     .catch(error => {
@@ -994,11 +1053,17 @@ function updatePagination(total, offset) {
 
 // Initial load
 document.addEventListener('DOMContentLoaded', () => {
-    // 设置执行记录默认日期为今天
     const today = new Date().toISOString().split('T')[0];
+
+    // 执行记录默认日期
     document.getElementById('runs-start-date').value = today;
     document.getElementById('runs-end-date').value = today;
 
+    // 监测结果默认日期
+    document.getElementById('results-start-date').value = today;
+    document.getElementById('results-end-date').value = today;
+
+    // 加载初始数据
     loadJobs();
     loadStats();
     loadRuns();
