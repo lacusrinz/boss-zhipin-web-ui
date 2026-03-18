@@ -58,5 +58,51 @@ class TestFeishuServiceToken:
         assert mock_post.call_count == 1
 
 
+class TestFeishuServiceMessageFormatting:
+    """测试消息格式化功能"""
+
+    def test_format_monitoring_notification_single_company(self):
+        """测试单企业的消息格式化"""
+        service = FeishuService('test_app_id', 'test_app_secret')
+
+        companies = [
+            {
+                'company_name': '上海智能制造有限公司',
+                'reg_cap': '500万',
+                'monitoring_time': '2026-03-18 14:30:00'
+            }
+        ]
+
+        message = service.format_monitoring_notification(companies, '华东地区监测')
+
+        assert '华东地区监测' in message
+        assert '上海智能制造有限公司' in message
+        assert '500万' in message
+        assert '1 家' in message
+
+    def test_format_monitoring_notification_multiple_companies(self):
+        """测试多企业的消息格式化"""
+        service = FeishuService('test_app_id', 'test_app_secret')
+
+        companies = [
+            {
+                'company_name': '上海智能制造有限公司',
+                'reg_cap': '500万',
+                'monitoring_time': '2026-03-18 14:30:00'
+            },
+            {
+                'company_name': '苏州医疗器械科技有限公司',
+                'reg_cap': '200万',
+                'monitoring_time': '2026-03-18 14:30:00'
+            }
+        ]
+
+        message = service.format_monitoring_notification(companies, '华东地区监测')
+
+        assert '2 家' in message
+        assert '1. 上海智能制造有限公司' in message
+        assert '2. 苏州医疗器械科技有限公司' in message
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

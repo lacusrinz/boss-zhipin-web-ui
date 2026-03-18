@@ -72,3 +72,37 @@ class FeishuService:
         except requests.RequestException as e:
             self.logger.error(f"获取 Token 网络错误: {e}")
             raise Exception(f"获取 Token 失败: {str(e)}")
+
+    def format_monitoring_notification(self, companies: List[Dict], config_name: str) -> str:
+        """
+        格式化监测结果为纯文本消息
+
+        Args:
+            companies: 企业列表
+            config_name: 监测配置名称
+
+        Returns:
+            str: 格式化的纯文本消息
+        """
+        from datetime import datetime
+
+        # 获取当前北京时间
+        beijing_tz = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+        # 构建消息
+        lines = [
+            "🔔 企业监测新发现",
+            "",
+            f"监测配置: {config_name}",
+            f"发现时间: {beijing_tz}",
+            f"新增企业: {len(companies)} 家",
+            "",
+            "企业列表:"
+        ]
+
+        for idx, company in enumerate(companies, 1):
+            company_name = company.get('company_name', '未知企业')
+            reg_cap = company.get('reg_cap', '未知')
+            lines.append(f"{idx}. {company_name} (注册资本: {reg_cap})")
+
+        return "\n".join(lines)
