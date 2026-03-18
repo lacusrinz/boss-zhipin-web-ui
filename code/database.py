@@ -1195,12 +1195,16 @@ class BOSSDatabase:
             return None
 
     def get_monitoring_runs(self, config_id: Optional[int] = None,
+                           start_date: Optional[str] = None,
+                           end_date: Optional[str] = None,
                            limit: int = 50, offset: int = 0) -> list:
         """
-        Get monitoring run records
+        Get monitoring run records with date filtering
 
         Args:
             config_id: Filter by config ID (optional)
+            start_date: Filter by start date (YYYY-MM-DD format)
+            end_date: Filter by end date (YYYY-MM-DD format)
             limit: Number of records to return
             offset: Pagination offset
 
@@ -1219,6 +1223,15 @@ class BOSSDatabase:
             if config_id:
                 query += " AND config_id = ?"
                 params.append(config_id)
+
+            # Add date filtering
+            if start_date:
+                query += " AND DATE(run_time) >= ?"
+                params.append(start_date)
+
+            if end_date:
+                query += " AND DATE(run_time) <= ?"
+                params.append(end_date)
 
             query += " ORDER BY run_time DESC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
