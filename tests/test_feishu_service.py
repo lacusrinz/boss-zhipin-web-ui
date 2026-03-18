@@ -104,5 +104,59 @@ class TestFeishuServiceMessageFormatting:
         assert '2. 苏州医疗器械科技有限公司' in message
 
 
+class TestFeishuServiceSendMessage:
+    """测试消息发送功能"""
+
+    @patch('code.feishu_service.requests.post')
+    def test_send_text_message_to_group(self, mock_post):
+        """测试发送群聊消息"""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'code': 0}
+        mock_post.return_value = mock_response
+
+        service = FeishuService('test_app_id', 'test_app_secret')
+        service._token = 'test_token'  # 设置 mock token
+
+        result = service.send_text_message(
+            target_id='oc_test123',
+            target_type='group',
+            content='测试消息'
+        )
+
+        assert result.get('error') is None
+        assert mock_post.call_count == 2  # 一次获取 token，一次发送消息
+
+    @patch('code.feishu_service.requests.post')
+    def test_send_text_message_api_error(self, mock_post):
+        """测试 API 错误处理"""
+        # Mock token 响应（成功）
+        token_response = Mock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'code': 0,
+            'tenant_access_token': 'test_token',
+            'expire': 7200
+        }
+
+        # Mock 消息发送响应（失败）
+        message_response = Mock()
+        message_response.status_code = 200
+        message_response.json.return_value = {'code': 9999, 'msg': 'Invalid token'}
+
+        mock_post.side_effect = [token_response, message_response]
+
+        service = FeishuService('test_app_id', 'test_app_secret')
+
+        result = service.send_text_message(
+            target_id='oc_test123',
+            target_type='group',
+            content='测试消息'
+        )
+
+        assert 'error' in result
+        assert result['error'] == 'Invalid token'
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

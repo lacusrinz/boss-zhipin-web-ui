@@ -4,6 +4,7 @@
 """
 import os
 import time
+import json
 import logging
 import requests
 from typing import Dict, List, Optional
@@ -106,3 +107,83 @@ class FeishuService:
             lines.append(f"{idx}. {company_name} (注册资本: {reg_cap})")
 
         return "\n".join(lines)
+
+    def send_text_message(self, target_id: str, target_type: str, content: str) -> Dict:
+        """
+        发送纯文本消息到群聊或个人
+
+        Args:
+            target_id: 目标 ID（群聊 ID 或用户 open_id）
+            target_type: 目标类型 ('group' 或 'user')
+            content: 消息内容
+
+        Returns:
+            dict: 结果字典
+                  - 成功时: {'success': True}
+                  - 失败时: {'error': 'error message'}
+        """
+        try:
+            # 获取 access token
+            token = self.get_tenant_access_token()
+
+            # 设置 receive_id_type
+            receive_id_type = "chat_id" if target_type == "group" else "open_id"
+
+            # 构建请求头
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+
+            # 构建请求体
+            payload = {
+                "receive_id": target_id,
+                "msg_type": "text",
+                "content": json.dumps({"text": content})
+            }
+
+            # 添加 receive_id_type 到 URL 参数
+            params = {"receive_id_type": receive_id_type}
+
+            # 发送请求（带重试）
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        self.MESSAGE_URL,
+                        headers=headers,
+                        params=params,
+                        json=payload,
+                        timeout=10
+                    )
+                    response.raise_for_status()
+
+                    data = response.json()
+
+                    if data.get('code') == 0:
+                        self.logger.info(f"消息发送成功: {target_type}/{target_id}")
+                        return {'success': True}
+                    else:
+                        error_msg = data.get('msg', 'Unknown error')
+                        self.logger.error(f"飞书 API 返回错误: {error_msg}")
+                        return {'error': error_msg}
+
+                except requests.Timeout:
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt  # 指数退避
+                        self.logger.warning(f"请求超时，{wait_time}秒后重试...")
+                        time.sleep(wait_time)
+                    else:
+                        return {'error': '请求超时'}
+
+                except requests.RequestException as e:
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        self.logger.warning(f"请求失败，{wait_time}秒后重试...")
+                        time.sleep(wait_time)
+                    else:
+                        return {'error': f'网络错误: {str(e)}'}
+
+        except Exception as e:
+            self.logger.error(f"发送消息异常: {e}")
+            return {'error': str(e)}
