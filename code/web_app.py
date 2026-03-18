@@ -812,17 +812,36 @@ def get_monitoring_jobs():
     """Get all monitoring jobs status"""
     jobs = scheduler.get_jobs()
 
+    # Get database connection to fetch time range info
+    db = get_db()
+
     job_list = []
     for job in jobs:
         if job.id.startswith('monitoring_'):
             config_id = int(job.id.split('_')[1])
-            job_list.append({
+
+            # Get config to retrieve time range
+            config = None
+            if db.conn:
+                config = db.get_monitoring_config(config_id)
+
+            job_data = {
                 'id': job.id,
                 'config_id': config_id,
                 'name': job.name,
                 'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
                 'paused': not job.next_run_time
-            })
+            }
+
+            # Add time range fields if config exists
+            if config:
+                job_data['monitoring_start_time'] = config.get('monitoring_start_time')
+                job_data['monitoring_end_time'] = config.get('monitoring_end_time')
+
+            job_list.append(job_data)
+
+    if db.conn:
+        db.close()
 
     return jsonify({'success': True, 'jobs': job_list})
 
