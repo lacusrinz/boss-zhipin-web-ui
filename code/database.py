@@ -1289,6 +1289,43 @@ class BOSSDatabase:
             logging.error(f"Failed to get monitoring runs count: {e}")
             return 0
 
+    def get_monitoring_runs_count_filtered(self, config_id: Optional[int] = None,
+                                          start_date: Optional[str] = None,
+                                          end_date: Optional[str] = None) -> int:
+        """
+        Get total count of monitoring runs with filters applied
+
+        Args:
+            config_id: Filter by config ID (optional)
+            start_date: Filter by start date (YYYY-MM-DD format)
+            end_date: Filter by end date (YYYY-MM-DD format)
+
+        Returns:
+            int: Total count of filtered records
+        """
+        try:
+            query = "SELECT COUNT(*) FROM monitoring_runs WHERE 1=1"
+            params = []
+
+            if config_id:
+                query += " AND config_id = ?"
+                params.append(config_id)
+
+            # Add date filtering
+            if start_date:
+                query += " AND DATE(run_time) >= ?"
+                params.append(start_date)
+
+            if end_date:
+                query += " AND DATE(run_time) <= ?"
+                params.append(end_date)
+
+            self.cursor.execute(query, params)
+            return self.cursor.fetchone()[0]
+        except Exception as e:
+            logging.error(f"Failed to get filtered monitoring runs count: {e}")
+            return 0
+
 
 def main():
     """测试数据库功能"""

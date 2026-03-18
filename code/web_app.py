@@ -946,7 +946,12 @@ def get_monitoring_runs():
         offset=offset
     )
 
-    total = db.get_monitoring_runs_count()
+    # Use filtered count to apply the same filters as the data query
+    total = db.get_monitoring_runs_count_filtered(
+        config_id=config_id,
+        start_date=start_date,
+        end_date=end_date
+    )
     db.close()
 
     return jsonify({
