@@ -9,6 +9,7 @@ import sqlite3
 import logging
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Optional, Tuple
 
 
@@ -1177,11 +1178,15 @@ class BOSSDatabase:
             int: Inserted record ID or None if failed
         """
         try:
+            # Get current Beijing time
+            beijing_tz = ZoneInfo("Asia/Shanghai")
+            run_time = datetime.now(beijing_tz).strftime('%Y-%m-%d %H:%M:%S')
+
             self.cursor.execute("""
                 INSERT INTO monitoring_runs
-                (config_id, config_name, success, companies_added, companies_skipped, error_message)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (config_id, config_name, success, companies_added,
+                (config_id, config_name, run_time, success, companies_added, companies_skipped, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (config_id, config_name, run_time, success, companies_added,
                   companies_skipped, error_message))
             self.conn.commit()
             return self.cursor.lastrowid
