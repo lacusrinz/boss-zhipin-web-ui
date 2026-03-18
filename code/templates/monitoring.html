@@ -37,6 +37,53 @@
 .close:hover {
     color: #000;
 }
+
+.time-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.time-range-inputs .time-input-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.time-range-inputs .time-input-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.25rem;
+}
+
+.time-range-inputs input[type="time"] {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.time-range-inputs input[type="time"]:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.time-range-inputs .separator {
+    display: flex;
+    align-items: center;
+    padding-top: 1.25rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.time-range-help {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
 </style>
 
 <div class="container mx-auto px-4 py-8">
@@ -251,6 +298,22 @@
                     <label for="interval-minutes-input" class="block text-sm font-medium text-gray-700 mb-1">监测间隔（分钟）</label>
                     <input type="number" name="interval_minutes" id="interval-minutes-input" value="5" min="1"
                            class="w-32 border rounded px-3 py-2">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">监测时间段</label>
+                    <div class="time-range-inputs">
+                        <div class="time-input-group">
+                            <label for="start-time-input">开始时间</label>
+                            <input type="time" name="start_time" id="start-time-input" value="09:00">
+                        </div>
+                        <div class="separator">至</div>
+                        <div class="time-input-group">
+                            <label for="end-time-input">结束时间</label>
+                            <input type="time" name="end_time" id="end-time-input" value="18:00">
+                        </div>
+                    </div>
+                    <div class="time-range-help">监测任务将在该时间段内执行，其他时间暂停</div>
                 </div>
 
                 <div>
@@ -501,9 +564,35 @@ function clearAllRegions() {
     document.querySelectorAll('input[name="region_codes"]').forEach(cb => cb.checked = false);
 }
 
+// Time range validation
+function validateTimeRange() {
+    const startTime = document.getElementById('start-time-input').value;
+    const endTime = document.getElementById('end-time-input').value;
+
+    if (!startTime || !endTime) {
+        return true; // Allow empty values (will use defaults)
+    }
+
+    const start = new Date(`2000-01-01T${startTime}`);
+    const end = new Date(`2000-01-01T${endTime}`);
+
+    if (start >= end) {
+        alert('开始时间必须早于结束时间');
+        return false;
+    }
+
+    return true;
+}
+
 // Monitoring Configuration
 document.getElementById('monitoring-config-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // Validate time range first
+    if (!validateTimeRange()) {
+        return;
+    }
+
     const formData = new FormData(e.target);
 
     // Get selected regions from checkboxes
@@ -523,7 +612,9 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         config_name: formData.get('config_name'),
         region_codes: regionCodes,
         interval_minutes: parseInt(formData.get('interval_minutes')),
-        reg_cap: reg_cap
+        reg_cap: reg_cap,
+        start_time: formData.get('start_time'),
+        end_time: formData.get('end_time')
     };
 
     const btn = e.target.querySelector('button[type="submit"]');
@@ -601,12 +692,22 @@ async function loadJobs() {
     .then(result => {
         const container = document.getElementById('jobs-list');
         if (result.jobs && result.jobs.length > 0) {
-            container.innerHTML = result.jobs.map(job => `
+            container.innerHTML = result.jobs.map(job => {
+                // Format time range for display
+                let timeRangeDisplay = '全天';
+                if (job.start_time && job.end_time) {
+                    timeRangeDisplay = `${job.start_time} - ${job.end_time}`;
+                }
+
+                return `
                 <div class="flex items-center justify-between p-3 border rounded">
                     <div>
                         <div class="font-medium">${job.name}</div>
                         <div class="text-sm text-gray-500">
                             下次执行: ${job.next_run_time ? new Date(job.next_run_time).toLocaleString() : '已暂停'}
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            监测时段: ${timeRangeDisplay}
                         </div>
                     </div>
                     <div class="space-x-2">
@@ -624,7 +725,8 @@ async function loadJobs() {
                         </button>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         } else {
             container.innerHTML = '<p class="text-gray-500">暂无监测任务</p>';
         }
