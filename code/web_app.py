@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
+from zoneinfo import ZoneInfo
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -232,6 +233,43 @@ def run_monitoring_job_now(config_id: int):
     except Exception as e:
         logging.error(f"Failed to run job monitoring_{config_id}: {e}")
         return False
+
+
+def is_within_monitoring_hours(start_time: str, end_time: str) -> bool:
+    """
+    Check if current Beijing time is within the monitoring time range.
+
+    Args:
+        start_time: Start time in HH:MM format (e.g., "09:00")
+        end_time: End time in HH:MM format (e.g., "18:00")
+
+    Returns:
+        True if current time is within range, or if no time restriction is set
+        False if current time is outside the specified range
+    """
+    # Return True if no time restriction (None or empty strings)
+    if not start_time or not end_time:
+        return True
+
+    # Get current Beijing time
+    beijing_tz = ZoneInfo("Asia/Shanghai")
+    now = datetime.now(beijing_tz)
+    current_time = now.strftime("%H:%M")
+
+    # Compare times
+    return start_time <= current_time <= end_time
+
+
+def get_beijing_time_str() -> str:
+    """
+    Get current Beijing time as a formatted string.
+
+    Returns:
+        Formatted Beijing time string like "2026-03-18 14:30:00 +08:00"
+    """
+    beijing_tz = ZoneInfo("Asia/Shanghai")
+    now = datetime.now(beijing_tz)
+    return now.strftime("%Y-%m-%d %H:%M:%S %z")
 
 
 # ==================== 数据库连接 ====================
