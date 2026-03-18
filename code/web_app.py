@@ -905,18 +905,18 @@ def get_monitored_companies():
 
     companies = db.get_monitored_companies(
         config_id=config_id,
-        start_date=start_date,  # 新增
-        end_date=end_date,      # 新增
+        start_date=start_date,
+        end_date=end_date,
         limit=limit,
         offset=offset
     )
 
-    # Get total count
-    if config_id:
-        db.cursor.execute("SELECT COUNT(*) FROM monitored_companies WHERE config_id = ?", (config_id,))
-    else:
-        db.cursor.execute("SELECT COUNT(*) FROM monitored_companies")
-    total = db.cursor.fetchone()[0]
+    # Use filtered count to apply the same filters as the data query
+    total = db.get_monitored_companies_count_filtered(
+        config_id=config_id,
+        start_date=start_date,
+        end_date=end_date
+    )
 
     db.close()
 
