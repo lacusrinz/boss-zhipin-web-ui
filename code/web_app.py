@@ -730,6 +730,31 @@ def update_monitoring_config(config_id):
     if 'reg_cap' in data:
         updates['reg_cap'] = data['reg_cap']
 
+    # Handle time range fields with validation
+    monitoring_start_time = None
+    monitoring_end_time = None
+
+    if 'monitoring_start_time' in data:
+        monitoring_start_time = data['monitoring_start_time'].strip() if data['monitoring_start_time'] else None
+        if monitoring_start_time:
+            # Validate time format
+            if not validate_time_format(monitoring_start_time):
+                return jsonify({'success': False, 'error': '监控开始时间格式无效，请使用HH:MM格式（例如：09:00）'}), 400
+            updates['monitoring_start_time'] = monitoring_start_time
+
+    if 'monitoring_end_time' in data:
+        monitoring_end_time = data['monitoring_end_time'].strip() if data['monitoring_end_time'] else None
+        if monitoring_end_time:
+            # Validate time format
+            if not validate_time_format(monitoring_end_time):
+                return jsonify({'success': False, 'error': '监控结束时间格式无效，请使用HH:MM格式（例如：18:00）'}), 400
+            updates['monitoring_end_time'] = monitoring_end_time
+
+    # Validate time range if both times are provided
+    if monitoring_start_time and monitoring_end_time:
+        if not validate_time_range(monitoring_start_time, monitoring_end_time):
+            return jsonify({'success': False, 'error': '监控时间范围无效：结束时间必须晚于开始时间（不支持跨天）'}), 400
+
     success = db.update_monitoring_config(config_id, **updates)
 
     if success and 'interval_minutes' in updates:
