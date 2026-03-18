@@ -408,7 +408,7 @@
                 </thead>
                 <tbody id="runs-table">
                     <tr>
-                        <td colspan="6" class="text-center py-4 text-gray-500">
+                        <td colspan="3" class="text-center py-4 text-gray-500">
                             加载中...
                         </td>
                     </tr>
@@ -431,15 +431,12 @@
                     <tr class="border-b">
                         <th class="text-left py-2">企业名称</th>
                         <th class="text-left py-2">信用代码</th>
-                        <th class="text-left py-2">成立日期</th>
                         <th class="text-left py-2">注册资本</th>
-                        <th class="text-left py-2">地区</th>
-                        <th class="text-left py-2">监测时间</th>
                     </tr>
                 </thead>
                 <tbody id="companies-table">
                     <tr>
-                        <td colspan="6" class="text-center py-4 text-gray-500">
+                        <td colspan="3" class="text-center py-4 text-gray-500">
                             加载中...
                         </td>
                     </tr>
@@ -911,12 +908,7 @@ async function loadCompanies(offset = 0) {
                 <tr class="border-b hover:bg-gray-50">
                     <td class="py-2">${company.company_name}</td>
                     <td class="py-2 text-sm text-gray-600">${company.credit_code || '-'}</td>
-                    <td class="py-2">${company.reg_date || '-'}</td>
                     <td class="py-2">${company.reg_cap || '-'}</td>
-                    <td class="py-2">${company.region_name || '-'}</td>
-                    <td class="py-2 text-sm text-gray-600">
-                        ${new Date(company.monitoring_time).toLocaleString()}
-                    </td>
                 </tr>
             `).join('');
 
