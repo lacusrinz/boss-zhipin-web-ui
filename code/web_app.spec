@@ -34,6 +34,12 @@ a = Analysis(
         'lxml._elementpath',
         'openpyxl',
         'sqlite3',
+        'requests',
+        'requests.packages.urllib3',
+        'urllib3',
+        'certifi',
+        'charset_normalizer',
+        'idna',
         'sqlalchemy',
         'sqlalchemy.dialects.sqlite',
         'sqlalchemy.dialects',
@@ -41,6 +47,13 @@ a = Analysis(
         'apscheduler.executors.pool',
         'apscheduler.executors.base',
         'apscheduler.jobstores.base',
+        # Python environment
+        'dotenv',
+        'python-dotenv',
+        # Additional dependencies
+        'zoneinfo',
+        'cryptography',
+        'tzdata',
         # Local modules
         'database',
         'parsers',
