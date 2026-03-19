@@ -13,6 +13,9 @@ python-dateutil>=2.8.0
 # Web 框架
 flask>=3.0.0
 
+# 数据库（APScheduler 依赖）
+sqlalchemy>=2.0.0
+
 # 打包工具（仅打包时需要）
 pyinstaller>=6.0.0
 
