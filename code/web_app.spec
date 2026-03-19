@@ -10,15 +10,22 @@ import sys
 
 block_cipher = None
 
+# 获取当前目录，确保 PyInstaller 能找到本地模块
+current_dir = os.path.dirname(os.path.abspath(SPEC))
+
 a = Analysis(
     ['web_app.py'],
-    pathex=[],
+    pathex=[current_dir],
     binaries=[],
     datas=[
         # 包含模板文件
         ('templates', 'templates'),
         # 包含解析器模块
         ('parsers', 'parsers'),
+        # 包含本地Python模块
+        ('database.py', '.'),
+        ('feishu_service.py', '.'),
+        ('token_service.py', '.'),
     ],
     hiddenimports=[
         # External packages
@@ -39,6 +46,8 @@ a = Analysis(
         'parsers',
         'parsers.base',
         'parsers.boss_zhipin',
+        'feishu_service',
+        'token_service',
     ],
     hookspath=[],
     hooksconfig={},
