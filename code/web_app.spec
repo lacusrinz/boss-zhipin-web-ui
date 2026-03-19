@@ -21,6 +21,7 @@ a = Analysis(
         ('parsers', 'parsers'),
     ],
     hiddenimports=[
+        # External packages
         'bs4',
         'lxml',
         'lxml._elementpath',
@@ -33,6 +34,11 @@ a = Analysis(
         'apscheduler.executors.pool',
         'apscheduler.executors.base',
         'apscheduler.jobstores.base',
+        # Local modules
+        'database',
+        'parsers',
+        'parsers.base',
+        'parsers.boss_zhipin',
     ],
     hookspath=[],
     hooksconfig={},
