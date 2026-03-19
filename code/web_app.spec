@@ -28,39 +28,60 @@ a = Analysis(
         ('token_service.py', '.'),
     ],
     hiddenimports=[
-        # External packages
+        # External packages - HTML parsing
         'bs4',
         'lxml',
         'lxml._elementpath',
+        # External packages - Excel processing
         'openpyxl',
+        # External packages - Database
         'sqlite3',
-        'requests',
-        'requests.packages.urllib3',
-        'urllib3',
-        'certifi',
-        'charset_normalizer',
-        'idna',
         'sqlalchemy',
         'sqlalchemy.dialects.sqlite',
         'sqlalchemy.dialects',
+        'sqlalchemy.engine',
+        'sqlalchemy.pool',
+        # External packages - HTTP requests
+        'requests',
+        'requests.packages',
+        'requests.packages.urllib3',
+        'urllib3',
+        'urllib3.packages',
+        # External packages - SSL/Encoding
+        'certifi',
+        'charset_normalizer',
+        'idna',
+        # External packages - APScheduler
+        'apscheduler',
+        'apscheduler.jobstores',
         'apscheduler.jobstores.sqlalchemy',
+        'apscheduler.jobstores.base',
+        'apscheduler.executors',
         'apscheduler.executors.pool',
         'apscheduler.executors.base',
-        'apscheduler.jobstores.base',
-        # Python environment
+        'apscheduler.schedulers',
+        'apscheduler.schedulers.background',
+        'apscheduler.triggers',
+        'apscheduler.triggers.interval',
+        # External packages - Environment & Config
         'dotenv',
+        'dotenv.parser',
+        'dotenv.main',
         'python-dotenv',
-        # Additional dependencies
+        # External packages - Timezone & Crypto
         'zoneinfo',
         'cryptography',
+        'cryptography.fernet',
         'tzdata',
-        # Local modules
-        'database',
-        'parsers',
-        'parsers.base',
-        'parsers.boss_zhipin',
-        'feishu_service',
-        'token_service',
+        # External packages - Flask
+        'flask',
+        'flask.templating',
+        'jinja2',
+        'werkzeug',
+        'werkzeug.serving',
+        # External packages - Logging
+        'logging',
+        'logging.handlers',
     ],
     hookspath=[],
     hooksconfig={},
