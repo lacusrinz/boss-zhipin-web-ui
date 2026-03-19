@@ -742,6 +742,10 @@ class BOSSDatabase:
                     reg_cap TEXT,
                     monitoring_start_time TEXT DEFAULT '09:00',
                     monitoring_end_time TEXT DEFAULT '18:00',
+                    feishu_enabled BOOLEAN DEFAULT 0,
+                    feishu_app_id TEXT,
+                    feishu_app_secret TEXT,
+                    feishu_group_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -776,6 +780,30 @@ class BOSSDatabase:
                 ON monitored_companies(company_name)
             """)
 
+            # Create monitoring_runs table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS monitoring_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_id INTEGER NOT NULL,
+                    run_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    run_status TEXT DEFAULT 'running',
+                    companies_found INTEGER DEFAULT 0,
+                    new_companies INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    execution_time_seconds REAL,
+                    FOREIGN KEY (config_id) REFERENCES monitoring_configs (id)
+                )
+            """)
+
+            # Create index for monitoring_runs
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_monitoring_runs_config_time
+                ON monitoring_runs(config_id, run_time)
+            """)
+
+            # Migration: Add missing columns to existing tables
+            self._migrate_monitoring_tables()
+
             self.cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_monitoring_time
                 ON monitored_companies(monitoring_time)
@@ -798,6 +826,46 @@ class BOSSDatabase:
         except Exception as e:
             logging.error(f"Failed to initialize monitoring tables: {e}")
             return False
+
+    def _migrate_monitoring_tables(self):
+        """
+        Migrate monitoring tables to add missing columns
+        """
+        try:
+            # Add feishu_enabled column if not exists
+            self.cursor.execute("PRAGMA table_info(monitoring_configs)")
+            columns = [row[1] for row in self.cursor.fetchall()]
+            if 'feishu_enabled' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN feishu_enabled BOOLEAN DEFAULT 0
+                """)
+                logging.info("Added feishu_enabled column to monitoring_configs")
+
+            if 'feishu_app_id' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN feishu_app_id TEXT
+                """)
+                logging.info("Added feishu_app_id column to monitoring_configs")
+
+            if 'feishu_app_secret' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN feishu_app_secret TEXT
+                """)
+                logging.info("Added feishu_app_secret column to monitoring_configs")
+
+            if 'feishu_group_id' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN feishu_group_id TEXT
+                """)
+                logging.info("Added feishu_group_id column to monitoring_configs")
+
+            self.conn.commit()
+        except Exception as e:
+            logging.error(f"Migration failed: {e}")
 
     def insert_riskbird_config(self, config_key: str, config_value: str) -> bool:
         """

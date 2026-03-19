@@ -260,7 +260,7 @@ def add_monitoring_job(config_id: int, interval_minutes: int):
 
     try:
         scheduler.add_job(
-            func='web_app:run_monitoring_task_wrapper',
+            func=run_monitoring_task_wrapper,  # Direct function reference for PyInstaller compatibility
             trigger=IntervalTrigger(minutes=interval_minutes),
             id=job_id,
             name=config_name,
