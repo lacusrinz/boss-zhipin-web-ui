@@ -13,6 +13,13 @@ python-dateutil>=2.8.0
 # Web 框架
 flask>=3.0.0
 
+# HTTP 请求（飞书推送依赖）
+requests>=2.31.0
+urllib3>=2.0.0
+certifi>=2023.0.0
+charset-normalizer>=3.0.0
+idna>=3.0.0
+
 # 数据库（APScheduler 依赖）
 sqlalchemy>=2.0.0
 

@@ -25,41 +25,22 @@ if exist "%Temp%\_MEI*" rmdir /s /q "%Temp%\_MEI*"
 echo ✓ 缓存清理完成
 echo.
 
-echo [步骤 3/6] 检查依赖...
-pip show requests >nul 2>&1
+echo [步骤 3/6] 安装所有依赖...
+echo 正在安装 requirements.txt 中的所有包...
+pip install -r ..\requirements.txt
 if errorlevel 1 (
-    echo requests 未安装，正在安装依赖...
-    pip install -r ..\requirements.txt
-) else (
-    echo ✓ 依赖已安装
+    echo ❌ 依赖安装失败！
+    pause
+    exit /b 1
 )
+echo ✓ 依赖安装完成
 echo.
 
-echo [步骤 4/6] 开始打包（使用 --collect-all 收集所有模块）...
+echo [步骤 4/6] 开始打包（使用 spec 文件）...
 echo 这可能需要 2-5 分钟，请耐心等待...
 echo.
 
-pyinstaller --clean ^
-    --onefile ^
-    --name "BOSS直聘管理工具" ^
-    --console ^
-    --hidden-import=requests ^
-    --hidden-import=urllib3 ^
-    --hidden-import=certifi ^
-    --hidden-import=charset_normalizer ^
-    --hidden-import=idna ^
-    --hidden-import=dotenv ^
-    --hidden-import=sqlalchemy ^
-    --hidden-import=apscheduler ^
-    --collect-all requests ^
-    --collect-all flask ^
-    --collect-all apscheduler ^
-    --add-data "templates;templates" ^
-    --add-data "parsers;parsers" ^
-    --add-data "database.py;." ^
-    --add-data "feishu_service.py;." ^
-    --add-data "token_service.py;." ^
-    web_app.py
+pyinstaller --clean web_app.spec
 
 if errorlevel 1 (
     echo.
