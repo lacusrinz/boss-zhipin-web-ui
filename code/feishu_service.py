@@ -17,19 +17,29 @@ class FeishuService:
     TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
     MESSAGE_URL = "https://open.feishu.cn/open-apis/im/v1/messages"
 
-    def __init__(self, app_id: str, app_secret: str):
+    def __init__(self, app_id: str, app_secret: str, verify_ssl: Optional[bool] = None):
         """
         初始化飞书服务
 
         Args:
             app_id: 飞书应用 ID
             app_secret: 飞书应用密钥
+            verify_ssl: 是否验证 SSL 证书，None 则从环境变量读取
         """
         self.app_id = app_id
         self.app_secret = app_secret
         self._token: Optional[str] = None
         self._token_expire_time: Optional[float] = None
         self.logger = logging.getLogger(__name__)
+
+        # SSL 证书验证：优先使用参数，否则从环境变量读取，默认 True
+        if verify_ssl is None:
+            self.verify_ssl = os.getenv('FEISHU_VERIFY_SSL', 'true').lower() == 'true'
+        else:
+            self.verify_ssl = verify_ssl
+
+        if not self.verify_ssl:
+            self.logger.warning("SSL 证书验证已禁用！这仅用于调试目的。")
 
     def get_tenant_access_token(self) -> str:
         """
@@ -55,10 +65,24 @@ class FeishuService:
         }
 
         try:
-            response = requests.post(self.TOKEN_URL, json=payload, timeout=10)
+            response = requests.post(
+                self.TOKEN_URL,
+                json=payload,
+                timeout=10,
+                verify=self.verify_ssl
+            )
             response.raise_for_status()
 
-            data = response.json()
+            # 尝试解析 JSON，失败时记录详细错误
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                # 记录响应内容以便调试
+                self.logger.error(f"JSON 解析失败: {e}")
+                self.logger.error(f"响应状态码: {response.status_code}")
+                self.logger.error(f"响应头: {dict(response.headers)}")
+                self.logger.error(f"响应内容前500字符: {response.text[:500]}")
+                raise Exception(f"飞书 API 返回非 JSON 响应，可能是网络或证书问题。详情: {str(e)}")
 
             if data.get('code') != 0:
                 raise Exception(f"获取 Token 失败: {data.get('msg')}")
@@ -154,11 +178,25 @@ class FeishuService:
                         headers=headers,
                         params=params,
                         json=payload,
-                        timeout=10
+                        timeout=10,
+                        verify=self.verify_ssl  # 使用配置的 SSL 验证选项
                     )
                     response.raise_for_status()
 
-                    data = response.json()
+                    # 尝试解析 JSON，失败时记录详细错误
+                    try:
+                        data = response.json()
+                    except json.JSONDecodeError as e:
+                        self.logger.error(f"JSON 解析失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                        self.logger.error(f"响应状态码: {response.status_code}")
+                        self.logger.error(f"响应内容前500字符: {response.text[:500]}")
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt
+                            self.logger.warning(f"{wait_time}秒后重试...")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            return {'error': f'飞书 API 返回非 JSON 响应: {str(e)}'}
 
                     if data.get('code') == 0:
                         self.logger.info(f"消息发送成功: {target_type}/{target_id}")
