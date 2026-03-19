@@ -746,6 +746,7 @@ class BOSSDatabase:
                     feishu_app_id TEXT,
                     feishu_app_secret TEXT,
                     feishu_group_id TEXT,
+                    feishu_target_type TEXT DEFAULT 'group',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -785,12 +786,12 @@ class BOSSDatabase:
                 CREATE TABLE IF NOT EXISTS monitoring_runs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     config_id INTEGER NOT NULL,
+                    config_name TEXT,
                     run_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    run_status TEXT DEFAULT 'running',
-                    companies_found INTEGER DEFAULT 0,
-                    new_companies INTEGER DEFAULT 0,
+                    success BOOLEAN DEFAULT 0,
+                    companies_added INTEGER DEFAULT 0,
+                    companies_skipped INTEGER DEFAULT 0,
                     error_message TEXT,
-                    execution_time_seconds REAL,
                     FOREIGN KEY (config_id) REFERENCES monitoring_configs (id)
                 )
             """)
@@ -862,6 +863,13 @@ class BOSSDatabase:
                     ADD COLUMN feishu_group_id TEXT
                 """)
                 logging.info("Added feishu_group_id column to monitoring_configs")
+
+            if 'feishu_target_type' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN feishu_target_type TEXT DEFAULT 'group'
+                """)
+                logging.info("Added feishu_target_type column to monitoring_configs")
 
             self.conn.commit()
         except Exception as e:
@@ -1024,7 +1032,7 @@ class BOSSDatabase:
             self.cursor.execute("""
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
-                       feishu_enabled, feishu_target_type, feishu_target_id,
+                       feishu_enabled, feishu_target_type, feishu_group_id,
                        created_at, updated_at
                 FROM monitoring_configs
                 WHERE id = ?
@@ -1033,7 +1041,7 @@ class BOSSDatabase:
             if row:
                 columns = ['id', 'config_name', 'region_codes', 'is_active',
                           'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
-                          'feishu_enabled', 'feishu_target_type', 'feishu_target_id',
+                          'feishu_enabled', 'feishu_target_type', 'feishu_group_id',
                           'created_at', 'updated_at']
                 return dict(zip(columns, row))
             return None
@@ -1080,7 +1088,7 @@ class BOSSDatabase:
 
     def update_monitoring_config_feishu(self, config_id: int, feishu_enabled: bool,
                                        feishu_target_type: str = None,
-                                       feishu_target_id: str = None) -> bool:
+                                       feishu_group_id: str = None) -> bool:
         """
         更新监测配置的飞书推送设置
 
@@ -1088,7 +1096,7 @@ class BOSSDatabase:
             config_id: 监测配置 ID
             feishu_enabled: 是否启用飞书推送
             feishu_target_type: 目标类型 ('group' 或 'user')
-            feishu_target_id: 目标 ID
+            feishu_group_id: 目标群组 ID
 
         Returns:
             bool: 更新是否成功
@@ -1098,10 +1106,10 @@ class BOSSDatabase:
                 UPDATE monitoring_configs
                 SET feishu_enabled = ?,
                     feishu_target_type = ?,
-                    feishu_target_id = ?,
+                    feishu_group_id = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (1 if feishu_enabled else 0, feishu_target_type, feishu_target_id, config_id))
+            """, (1 if feishu_enabled else 0, feishu_target_type, feishu_group_id, config_id))
 
             self.conn.commit()
             return True

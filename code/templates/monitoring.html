@@ -381,10 +381,10 @@
 
                         <!-- 目标 ID 输入 -->
                         <div>
-                            <label for="feishu-target-id" class="block text-sm font-medium text-gray-700 mb-1">
+                            <label for="feishu-group-id" class="block text-sm font-medium text-gray-700 mb-1">
                                 群聊 ID / 用户 open_id
                             </label>
-                            <input type="text" name="feishu_target_id" id="feishu-target-id"
+                            <input type="text" name="feishu_group_id" id="feishu-group-id"
                                    class="w-full border rounded px-3 py-2 text-sm"
                                    placeholder="如: oc_xxxxxxxxxxxxxxxxxxxx">
                             <div class="text-xs text-gray-500 mt-1">
@@ -768,7 +768,7 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         // 飞书设置
         feishu_enabled: document.getElementById('feishu-enabled').checked,
         feishu_target_type: formData.get('feishu_target_type'),
-        feishu_target_id: formData.get('feishu_target_id')
+        feishu_group_id: formData.get('feishu_group_id')
     };
 
     const btn = e.target.querySelector('button[type="submit"]');

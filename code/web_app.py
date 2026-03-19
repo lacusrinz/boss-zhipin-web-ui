@@ -195,7 +195,7 @@ def _send_feishu_notification(db, config: Dict, result: Dict, run_id: int = None
 
         # 发送消息
         send_result = feishu.send_text_message(
-            target_id=config['feishu_target_id'],
+            target_id=config['feishu_group_id'],
             target_type=config['feishu_target_type'],
             content=content
         )
@@ -739,7 +739,7 @@ def create_monitoring_config():
     # NEW: Feishu parameters
     feishu_enabled = data.get('feishu_enabled', False)
     feishu_target_type = data.get('feishu_target_type', '').strip()
-    feishu_target_id = data.get('feishu_target_id', '').strip()
+    feishu_group_id = data.get('feishu_group_id', '').strip()
 
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
@@ -789,7 +789,7 @@ def create_monitoring_config():
                 config_id=config_id,
                 feishu_enabled=True,
                 feishu_target_type=feishu_target_type if feishu_target_type else None,
-                feishu_target_id=feishu_target_id if feishu_target_id else None
+                feishu_group_id=feishu_group_id if feishu_group_id else None
             )
 
         # Add job to scheduler
