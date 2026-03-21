@@ -150,9 +150,11 @@
     <div id="config-modal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <span class="close" onclick="closeConfigModal()">&times;</span>
-            <h2 class="text-xl font-semibold mb-4">创建监测配置</h2>
+            <h2 class="text-xl font-semibold mb-4" id="config-modal-title">创建监测配置</h2>
 
             <form id="monitoring-config-form" class="space-y-4">
+                <!-- Hidden field for config_id (used in edit mode) -->
+                <input type="hidden" name="config_id" id="config-id-input" value="">
                 <div>
                     <label for="config-name-input" class="block text-sm font-medium text-gray-700 mb-1">配置名称</label>
                     <input type="text" name="config_name" id="config-name-input" required
@@ -567,7 +569,65 @@ function closeTokenModal() {
 }
 
 function openConfigModal() {
+    // Reset form and title for create mode
+    document.getElementById('monitoring-config-form').reset();
+    document.getElementById('config-id-input').value = '';
+    document.getElementById('config-modal-title').textContent = '创建监测配置';
     document.getElementById('config-modal').style.display = 'block';
+    // Reset Feishu fields visibility
+    toggleFeishuFields();
+}
+
+async function openEditConfigModal(configId) {
+    // Load config data and open modal in edit mode
+    try {
+        const response = await fetch(`/api/monitoring/configs/${configId}`);
+        const result = await response.json();
+
+        if (!result.success) {
+            alert('加载配置失败: ' + result.error);
+            return;
+        }
+
+        const config = result.config;
+
+        // Set edit mode
+        document.getElementById('config-id-input').value = config.id;
+        document.getElementById('config-modal-title').textContent = '编辑监测配置';
+
+        // Fill form fields
+        document.getElementById('config-name-input').value = config.config_name || '';
+        document.getElementById('interval-minutes-input').value = config.interval_minutes || 5;
+        document.getElementById('start-time-input').value = config.monitoring_start_time || '09:00';
+        document.getElementById('end-time-input').value = config.monitoring_end_time || '18:00';
+
+        // Set region checkboxes
+        document.querySelectorAll('input[name="region_codes"]').forEach(cb => {
+            cb.checked = config.region_codes.includes(cb.value);
+        });
+
+        // Set reg_cap radio
+        if (config.reg_cap) {
+            const regCapRadio = document.querySelector(`input[name="reg_cap"][value="${config.reg_cap}"]`);
+            if (regCapRadio) regCapRadio.checked = true;
+        }
+
+        // Set Feishu fields
+        document.getElementById('feishu-enabled').checked = !!config.feishu_enabled;
+        if (config.feishu_target_type) {
+            const targetTypeRadio = document.querySelector(`input[name="feishu_target_type"][value="${config.feishu_target_type}"]`);
+            if (targetTypeRadio) targetTypeRadio.checked = true;
+        }
+        document.getElementById('feishu-group-id').value = config.feishu_group_id || '';
+        toggleFeishuFields();
+
+        // Show modal
+        document.getElementById('config-modal').style.display = 'block';
+
+    } catch (error) {
+        console.error('Error loading config:', error);
+        alert('加载配置失败，请稍后重试');
+    }
 }
 
 function closeConfigModal() {
@@ -696,7 +756,7 @@ function toggleFeishuFields() {
 // 飞书测试消息
 document.getElementById('test-feishu-btn').addEventListener('click', async () => {
     const targetType = document.querySelector('input[name="feishu_target_type"]:checked').value;
-    const targetId = document.getElementById('feishu-target-id').value;
+    const targetId = document.getElementById('feishu-group-id').value;
 
     if (!targetId) {
         alert('请先输入群聊 ID 或用户 open_id');
@@ -743,6 +803,7 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
     }
 
     const formData = new FormData(e.target);
+    const configId = formData.get('config_id');
 
     // Get selected regions from checkboxes
     const regionCodes = Array.from(document.querySelectorAll('input[name="region_codes"]:checked'))
@@ -774,10 +835,35 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
     const btn = e.target.querySelector('button[type="submit"]');
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '创建中...';
 
-    fetch('/api/monitoring/configs', {
-        method: 'POST',
+    const isEditMode = configId && configId !== '';
+    const url = isEditMode ? `/api/monitoring/configs/${configId}` : '/api/monitoring/configs';
+    const method = isEditMode ? 'PUT' : 'POST';
+    btn.textContent = isEditMode ? '保存中...' : '创建中...';
+
+    // Pause job before editing if in edit mode
+    let wasPaused = false;
+    if (isEditMode) {
+        try {
+            const checkResponse = await fetch('/api/monitoring/jobs');
+            const checkResult = await checkResponse.json();
+            if (checkResult.jobs) {
+                const job = checkResult.jobs.find(j => j.config_id === parseInt(configId));
+                if (job) {
+                    wasPaused = job.paused;
+                    if (!wasPaused) {
+                        // Pause the job before editing
+                        await fetch(`/api/monitoring/jobs/${configId}/toggle`, { method: 'POST' });
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to check job status:', error);
+        }
+    }
+
+    fetch(url, {
+        method: method,
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
@@ -789,14 +875,25 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         return result;
     })
     .then(result => {
-        alert('监测配置创建成功！');
+        const successMsg = isEditMode ? '监测配置已更新！' : '监测配置创建成功！';
+        alert(successMsg);
         e.target.reset();
         closeConfigModal();
         loadJobs();
+
+        // If in edit mode, ask if user wants to resume the job
+        if (isEditMode && !wasPaused) {
+            setTimeout(() => {
+                if (confirm('配置已更新。是否恢复监测任务？')) {
+                    fetch(`/api/monitoring/jobs/${configId}/toggle`, { method: 'POST' })
+                        .then(() => loadJobs());
+                }
+            }, 100);
+        }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('创建失败: ' + error.message);
+        alert((isEditMode ? '更新' : '创建') + '失败: ' + error.message);
     })
     .finally(() => {
         btn.disabled = false;
@@ -868,6 +965,10 @@ async function loadJobs() {
                         <button onclick="runJobNow(${job.config_id})"
                                 class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
                             立即执行
+                        </button>
+                        <button onclick="openEditConfigModal(${job.config_id})"
+                                class="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600">
+                            修改
                         </button>
                         <button onclick="toggleJob(${job.config_id})"
                                 class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">

@@ -720,6 +720,29 @@ def get_monitoring_configs():
     return jsonify({'success': True, 'configs': configs})
 
 
+@app.route('/api/monitoring/configs/<int:config_id>', methods=['GET'])
+def get_monitoring_config_detail(config_id):
+    """Get a single monitoring configuration for editing"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    config = db.get_monitoring_config(config_id)
+    db.close()
+
+    if not config:
+        return jsonify({'success': False, 'error': '配置不存在'}), 404
+
+    # Parse region_codes from JSON string
+    import json
+    try:
+        config['region_codes'] = json.loads(config['region_codes'])
+    except:
+        config['region_codes'] = []
+
+    return jsonify({'success': True, 'config': config})
+
+
 @app.route('/api/monitoring/configs', methods=['POST'])
 def create_monitoring_config():
     """Create a new monitoring configuration"""
@@ -869,6 +892,20 @@ def update_monitoring_config(config_id):
         if monitoring_start_time and monitoring_end_time:
             if not validate_time_range(monitoring_start_time, monitoring_end_time):
                 return jsonify({'success': False, 'error': '监控时间范围无效：结束时间必须晚于开始时间（不支持跨天）'}), 400
+
+        # Handle Feishu fields
+        if 'feishu_enabled' in data:
+            updates['feishu_enabled'] = 1 if data['feishu_enabled'] else 0
+
+        if 'feishu_target_type' in data:
+            feishu_target_type = data['feishu_target_type'].strip() if data['feishu_target_type'] else None
+            if feishu_target_type and feishu_target_type.strip():
+                updates['feishu_target_type'] = feishu_target_type
+
+        if 'feishu_group_id' in data:
+            feishu_group_id = data['feishu_group_id'].strip() if data['feishu_group_id'] else None
+            if feishu_group_id and feishu_group_id.strip():
+                updates['feishu_group_id'] = feishu_group_id
 
         success = db.update_monitoring_config(config_id, **updates)
 

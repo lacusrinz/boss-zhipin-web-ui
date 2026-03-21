@@ -871,6 +871,20 @@ class BOSSDatabase:
                 """)
                 logging.info("Added feishu_target_type column to monitoring_configs")
 
+            if 'monitoring_start_time' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN monitoring_start_time TEXT DEFAULT '09:00'
+                """)
+                logging.info("Added monitoring_start_time column to monitoring_configs")
+
+            if 'monitoring_end_time' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN monitoring_end_time TEXT DEFAULT '18:00'
+                """)
+                logging.info("Added monitoring_end_time column to monitoring_configs")
+
             self.conn.commit()
         except Exception as e:
             logging.error(f"Migration failed: {e}")
@@ -1062,7 +1076,8 @@ class BOSSDatabase:
         """
         # Validate column names
         ALLOWED_COLUMNS = {'config_name', 'region_codes', 'is_active', 'interval_minutes', 'reg_cap',
-                          'monitoring_start_time', 'monitoring_end_time'}
+                          'monitoring_start_time', 'monitoring_end_time', 'feishu_enabled',
+                          'feishu_target_type', 'feishu_group_id'}
         invalid_columns = set(kwargs.keys()) - ALLOWED_COLUMNS
         if invalid_columns:
             logging.error(f"Invalid columns: {invalid_columns}")
