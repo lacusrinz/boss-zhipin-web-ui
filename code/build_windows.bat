@@ -59,11 +59,17 @@ if not exist "dist\BOSS直聘管理工具.exe" (
 echo ✓ 打包成功
 echo.
 
-echo [步骤 6/6] 创建启动配置...
-echo # 飞书推送配置 > dist\.env.example
-echo FEISHU_APP_ID=your_app_id >> dist\.env.example
-echo FEISHU_APP_SECRET=your_app_secret >> dist\.env.example
-echo FEISHU_VERIFY_SSL=true >> dist\.env.example
+echo [步骤 6/6] 复制配置文件...
+if exist "..\.env" (
+    copy "..\.env" "dist\.env" >nul
+    echo ✓ 已复制 .env 配置文件
+) else (
+    echo ⚠ 未找到 .env 文件，创建示例文件...
+    echo # 飞书推送配置 > dist\.env.example
+    echo FEISHU_APP_ID=your_app_id >> dist\.env.example
+    echo FEISHU_APP_SECRET=your_app_secret >> dist\.env.example
+    echo FEISHU_VERIFY_SSL=true >> dist\.env.example
+)
 echo.
 
 echo ============================================================

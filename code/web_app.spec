@@ -12,6 +12,8 @@ block_cipher = None
 
 # 获取当前目录，确保 PyInstaller 能找到本地模块
 current_dir = os.path.dirname(os.path.abspath(SPEC))
+# 获取项目根目录（code 目录的上一级）
+project_root = os.path.dirname(current_dir)
 
 a = Analysis(
     ['web_app.py'],
@@ -26,6 +28,8 @@ a = Analysis(
         ('database.py', '.'),
         ('feishu_service.py', '.'),
         ('token_service.py', '.'),
+        # 包含环境变量配置文件
+        (os.path.join(project_root, '.env'), '.'),
     ],
     hiddenimports=[
         # External packages - HTML parsing

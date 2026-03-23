@@ -64,9 +64,9 @@ def main():
     ):
         return 1
 
-    # 4. 复制说明文件到 dist 目录
+    # 4. 复制说明文件和配置文件到 dist 目录
     print(f"\n{'='*60}")
-    print(" [4/4] 复制用户说明文件")
+    print(" [4/4] 复制用户说明文件和配置文件")
     print(f"{'='*60}")
 
     readme_src = code_dir / "用户使用说明.txt"
@@ -75,6 +75,16 @@ def main():
     if readme_src.exists():
         shutil.copy(readme_src, readme_dst)
         print(f"  ✓ 已复制用户说明文件")
+
+    # 复制 .env 文件
+    env_src = code_dir.parent / ".env"
+    env_dst = code_dir / "dist" / ".env"
+
+    if env_src.exists():
+        shutil.copy(env_src, env_dst)
+        print(f"  ✓ 已复制 .env 配置文件")
+    else:
+        print(f"  ⚠ 未找到 .env 文件，跳过复制")
 
     # 创建 data 目录占位符
     data_dir = code_dir / "dist" / "data"
