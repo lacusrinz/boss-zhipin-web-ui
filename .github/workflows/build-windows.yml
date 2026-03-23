@@ -27,6 +27,20 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Create .env file with Feishu credentials
+      shell: pwsh
+      run: |
+        $envContent = @"
+        # 飞书应用配置
+        FEISHU_APP_ID=cli_a928e4e0f9b81cbd
+        FEISHU_APP_SECRET=GS9cLh89SG6LjrSoAqoSXGhGu3oFoIzo
+
+        # SSL 证书验证
+        FEISHU_VERIFY_SSL=true
+        "@
+        $envContent | Out-File -FilePath ".env" -Encoding UTF8
+        Write-Host "✅ .env 文件已创建"
+
     - name: Build EXE with PyInstaller
       run: |
         cd code

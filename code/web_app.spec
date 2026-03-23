@@ -15,28 +15,22 @@ current_dir = os.path.dirname(os.path.abspath(SPEC))
 # 获取项目根目录（code 目录的上一级）
 project_root = os.path.dirname(current_dir)
 
-# 构建数据文件列表
-datas_list = [
-    # 包含模板文件
-    ('templates', 'templates'),
-    # 包含解析器模块
-    ('parsers', 'parsers'),
-    # 包含本地Python模块
-    ('database.py', '.'),
-    ('feishu_service.py', '.'),
-    ('token_service.py', '.'),
-]
-
-# 只有在 .env 文件存在时才添加（避免 CI/CD 环境报错）
-env_file = os.path.join(project_root, '.env')
-if os.path.exists(env_file):
-    datas_list.append((env_file, '.'))
-
 a = Analysis(
     ['web_app.py'],
     pathex=[current_dir],
     binaries=[],
-    datas=datas_list,
+    datas=[
+        # 包含模板文件
+        ('templates', 'templates'),
+        # 包含解析器模块
+        ('parsers', 'parsers'),
+        # 包含本地Python模块
+        ('database.py', '.'),
+        ('feishu_service.py', '.'),
+        ('token_service.py', '.'),
+        # 包含环境变量配置文件（CI 中会创建此文件）
+        (os.path.join(project_root, '.env'), '.'),
+    ],
     hiddenimports=[
         # External packages - HTML parsing
         'bs4',
