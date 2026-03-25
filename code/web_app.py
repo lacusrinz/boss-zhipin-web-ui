@@ -13,6 +13,7 @@ from typing import List, Dict
 from zoneinfo import ZoneInfo
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from werkzeug.formparser import FormDataParser
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -26,12 +27,37 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 
+# Monkey patch werkzeug 的 FormDataParser 来修复大表单数据限制
+from werkzeug.formparser import default_stream_factory
+
+original_init = FormDataParser.__init__
+
+def patched_init(self, stream_factory=None, max_form_memory_size=None,
+                 max_content_length=None, cls=None, max_form_parts=None):
+    # 设置更大的默认值（如果未指定）
+    if max_form_memory_size is None:
+        max_form_memory_size = 100 * 1024 * 1024  # 100MB
+    # 使用默认的 stream_factory
+    if stream_factory is None:
+        stream_factory = default_stream_factory
+    original_init(self, stream_factory, max_form_memory_size,
+                  max_content_length, cls, max_form_parts)
+
+FormDataParser.__init__ = patched_init
+
 # 创建 Flask 应用
 app = Flask(__name__)
 app.secret_key = 'boss-zhipin-web-ui-dev-key-2026'
 
-# 设置最大请求内容长度为 50MB（用于处理大 HTML 文件）
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+# 设置最大请求内容长度为 100MB
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
+
+# 设置 werkzeug 的 form 数据内存限制（解决 413 错误）
+app.config['MAX_FORM_MEMORY_SIZE'] = 100 * 1024 * 1024  # 100MB
+app.config['MAX_FORM_PARTS'] = 1000  # 最大表单字段数
+
+print(f"[CONFIG] MAX_CONTENT_LENGTH: {app.config['MAX_CONTENT_LENGTH'] / 1024 / 1024:.0f} MB", file=sys.stderr, flush=True)
+print(f"[CONFIG] MAX_FORM_MEMORY_SIZE: {app.config['MAX_FORM_MEMORY_SIZE'] / 1024 / 1024:.0f} MB", file=sys.stderr, flush=True)
 
 # 获取基础目录（支持开发环境和打包后的 exe 环境）
 if getattr(sys, 'frozen', False):
@@ -409,6 +435,15 @@ def get_db():
 
 # ==================== 路由定义 ====================
 
+@app.before_request
+def log_request():
+    """记录请求信息用于调试"""
+    if request.path == '/parse':
+        print(f"[REQUEST] {request.method} {request.path}")
+        print(f"[REQUEST] Content-Length: {request.content_length}")
+        if request.content_length:
+            print(f"[REQUEST] Content-Length: {request.content_length / 1024:.2f} KB")
+
 @app.route('/')
 def index():
     """首页：HTML 粘贴页面"""
@@ -424,8 +459,33 @@ def index():
 @app.route('/parse', methods=['POST'])
 def parse():
     """解析 HTML 内容"""
+    import sys
+    import traceback
+    try:
+        print(f"[PARSE] 函数被调用了！", file=sys.stderr, flush=True)
+        print(f"[PARSE] request.form keys: {list(request.form.keys())}", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[PARSE] Debug error: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+
     html = request.form.get('html_content', '').strip()
-    site_code = request.form.get('site_code', 'boss_zhipin')
+
+    # 自动检测平台（如果用户没有手动选择）
+    site_code = request.form.get('site_code', '')
+    if not site_code or site_code == 'auto':
+        from parsers.base import BaseParser
+        detected_site = BaseParser.detect_site(html)
+        if detected_site != 'unknown':
+            site_code = detected_site
+            print(f"[PARSE] 自动检测到平台: {site_code}", file=sys.stderr, flush=True)
+        else:
+            # 无法检测时使用默认值
+            site_code = 'boss_zhipin'
+            print(f"[PARSE] 无法检测平台，使用默认: {site_code}", file=sys.stderr, flush=True)
+    else:
+        print(f"[PARSE] 用户选择平台: {site_code}", file=sys.stderr, flush=True)
+
+    print(f"[PARSE] HTML 内容大小: {len(html)} 字节 ({len(html)/1024:.2f} KB)", file=sys.stderr, flush=True)
 
     if not html:
         flash('请粘贴 HTML 内容', 'error')
@@ -434,9 +494,11 @@ def parse():
     try:
         # 获取对应站点的解析器
         parser = get_parser(site_code)
+        print(f"[PARSE] 解析器: {parser.SITE_NAME}", file=sys.stderr, flush=True)
 
         # 解析 HTML
         jobs = parser.parse(html, source='web_paste')
+        print(f"[PARSE] 解析结果: {len(jobs)} 个职位", file=sys.stderr, flush=True)
 
         if not jobs:
             flash('未找到职位信息，请检查粘贴的内容是否正确', 'error')
@@ -462,9 +524,13 @@ def parse():
         return redirect(url_for('jobs_list'))
 
     except ValueError as e:
+        print(f"[PARSE] ValueError: {e}", file=sys.stderr, flush=True)
         flash(str(e), 'error')
         return redirect(url_for('index'))
     except Exception as e:
+        print(f"[PARSE] Exception: {e}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         flash(f'解析失败: {str(e)}', 'error')
         return redirect(url_for('index'))
 

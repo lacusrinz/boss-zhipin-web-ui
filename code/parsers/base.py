@@ -117,3 +117,35 @@ class BaseParser(ABC):
             job['platform'] = platform
 
         return jobs
+
+    @classmethod
+    def detect(cls, html: str) -> bool:
+        """
+        检测 HTML 是否属于此站点
+
+        Args:
+            html: HTML 源码
+
+        Returns:
+            bool: 如果是此站点的 HTML 返回 True，否则返回 False
+        """
+        return False
+
+    @staticmethod
+    def detect_site(html: str) -> str:
+        """
+        自动检测 HTML 来源站点
+
+        Args:
+            html: HTML 源码
+
+        Returns:
+            str: 站点代码，如果无法识别返回 'unknown'
+        """
+        from . import PARSERS
+
+        for site_code, parser_class in PARSERS.items():
+            if parser_class.detect(html):
+                return site_code
+
+        return 'unknown'

@@ -5,16 +5,18 @@
 
 from .base import BaseParser
 from .boss_zhipin import BossZhipinParser
+from .fiftyone_job import FiftyOneJobParser
 
 # 解析器注册表
 PARSERS = {
     'boss_zhipin': BossZhipinParser,
+    '51job': FiftyOneJobParser,
 }
 
 # 支持的站点列表
 SUPPORTED_SITES = [
     {'code': 'boss_zhipin', 'name': 'BOSS直聘', 'enabled': True},
-    {'code': '51job', 'name': '前程无忧', 'enabled': False},
+    {'code': '51job', 'name': '前程无忧', 'enabled': True},
     {'code': 'zhaopin', 'name': '智联招聘', 'enabled': False},
     {'code': 'liepin', 'name': '猎聘', 'enabled': False},
 ]

@@ -15,6 +15,29 @@ class BossZhipinParser(BaseParser):
     SITE_CODE = 'boss_zhipin'
     SITE_NAME = 'BOSS直聘'
 
+    @classmethod
+    def detect(cls, html: str) -> bool:
+        """
+        检测 HTML 是否来自 BOSS 直聘
+
+        Args:
+            html: HTML 源码
+
+        Returns:
+            bool: 如果是 BOSS 直聘返回 True
+        """
+        # BOSS 直聘的典型特征
+        indicators = [
+            'job-card-box',           # 职位卡片的 class
+            'zhipin.com',             # 域名
+            'boss-name',              # 企业名称 class
+            'job-salary',             # 薪资 class
+            'www.zhipin.com',         # 完整域名
+        ]
+
+        html_lower = html.lower()
+        return any(indicator in html_lower for indicator in indicators)
+
     def parse(self, html: str, source: str = None) -> List[Dict]:
         """
         解析 BOSS 直聘 HTML 内容
@@ -95,12 +118,11 @@ class BossZhipinParser(BaseParser):
         jobs = self.deduplicate(jobs)
 
         # 添加平台标识
-        jobs = self.add_platform(jobs, source)
+        jobs = self.add_platform(jobs)
 
-        # source 字段保留为空（用于存储查询关键字）
+        # 添加 source 标识
         for job in jobs:
-            if 'source' not in job:
-                job['source'] = ''
+            job['source'] = source or ''
 
         return jobs
 
