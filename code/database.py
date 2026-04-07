@@ -820,6 +820,18 @@ class BOSSDatabase:
                 ON monitored_companies(credit_code)
             """)
 
+            # Create riskbird_token_sets table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS riskbird_token_sets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    token TEXT NOT NULL,
+                    app_uuid TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             self.conn.commit()
             logging.info("Monitoring tables initialized successfully")
             return True
@@ -884,6 +896,14 @@ class BOSSDatabase:
                     ADD COLUMN monitoring_end_time TEXT DEFAULT '18:00'
                 """)
                 logging.info("Added monitoring_end_time column to monitoring_configs")
+
+            # Add token_set_id column if not exists
+            if 'token_set_id' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN token_set_id INTEGER REFERENCES riskbird_token_sets(id) ON DELETE SET NULL
+                """)
+                logging.info("Added token_set_id column to monitoring_configs")
 
             self.conn.commit()
         except Exception as e:
@@ -972,6 +992,91 @@ class BOSSDatabase:
             logging.error(f"Failed to update riskbird config: {e}")
             return False
 
+    def insert_token_set(self, name: str, token: str, app_uuid: str) -> Optional[int]:
+        """Insert a new token set"""
+        try:
+            self.cursor.execute("""
+                INSERT INTO riskbird_token_sets (name, token, app_uuid)
+                VALUES (?, ?, ?)
+            """, (name, token, app_uuid))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"Failed to insert token set: {e}")
+            self.conn.rollback()
+            raise
+
+    def get_token_set(self, token_set_id: int) -> Optional[Dict]:
+        """Get a single token set by ID"""
+        try:
+            self.cursor.execute("""
+                SELECT id, name, token, app_uuid, created_at, updated_at
+                FROM riskbird_token_sets
+                WHERE id = ?
+            """, (token_set_id,))
+            row = self.cursor.fetchone()
+            if row:
+                return {
+                    'id': row[0], 'name': row[1], 'token': row[2],
+                    'app_uuid': row[3], 'created_at': row[4], 'updated_at': row[5]
+                }
+            return None
+        except Exception as e:
+            logging.error(f"Failed to get token set: {e}")
+            return None
+
+    def get_all_token_sets(self) -> List[Dict]:
+        """Get all token sets"""
+        try:
+            self.cursor.execute("""
+                SELECT id, name, token, app_uuid, created_at, updated_at
+                FROM riskbird_token_sets
+                ORDER BY created_at ASC
+            """)
+            rows = self.cursor.fetchall()
+            return [
+                {'id': r[0], 'name': r[1], 'token': r[2], 'app_uuid': r[3],
+                 'created_at': r[4], 'updated_at': r[5]}
+                for r in rows
+            ]
+        except Exception as e:
+            logging.error(f"Failed to get token sets: {e}")
+            return []
+
+    def update_token_set(self, token_set_id: int, **kwargs) -> bool:
+        """Update a token set"""
+        try:
+            allowed = {'name', 'token', 'app_uuid'}
+            updates = {k: v for k, v in kwargs.items() if k in allowed}
+            if not updates:
+                return False
+
+            set_clause = ', '.join([f"{k} = ?" for k in updates.keys()])
+            values = list(updates.values()) + [token_set_id]
+
+            self.cursor.execute(f"""
+                UPDATE riskbird_token_sets
+                SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, values)
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            logging.error(f"Failed to update token set: {e}")
+            self.conn.rollback()
+            return False
+
+    def delete_token_set(self, token_set_id: int) -> bool:
+        """Delete a token set"""
+        try:
+            self.cursor.execute("DELETE FROM riskbird_token_sets WHERE id = ?", (token_set_id,))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            logging.error(f"Failed to delete token set: {e}")
+            self.conn.rollback()
+            return False
+
     def insert_monitoring_config(self, config_name: str, region_codes: str,
                                  interval_minutes: int = 5, reg_cap: str = None,
                                  monitoring_start_time: str = '09:00',
@@ -1047,6 +1152,7 @@ class BOSSDatabase:
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
                        feishu_enabled, feishu_target_type, feishu_group_id,
+                       token_set_id,
                        created_at, updated_at
                 FROM monitoring_configs
                 WHERE id = ?
@@ -1056,6 +1162,7 @@ class BOSSDatabase:
                 columns = ['id', 'config_name', 'region_codes', 'is_active',
                           'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
                           'feishu_enabled', 'feishu_target_type', 'feishu_group_id',
+                          'token_set_id',
                           'created_at', 'updated_at']
                 return dict(zip(columns, row))
             return None
@@ -1077,7 +1184,7 @@ class BOSSDatabase:
         # Validate column names
         ALLOWED_COLUMNS = {'config_name', 'region_codes', 'is_active', 'interval_minutes', 'reg_cap',
                           'monitoring_start_time', 'monitoring_end_time', 'feishu_enabled',
-                          'feishu_target_type', 'feishu_group_id'}
+                          'feishu_target_type', 'feishu_group_id', 'token_set_id'}
         invalid_columns = set(kwargs.keys()) - ALLOWED_COLUMNS
         if invalid_columns:
             logging.error(f"Invalid columns: {invalid_columns}")
