@@ -153,8 +153,20 @@ class RiskBirdMonitor:
                 return result
 
             # Get API credentials
-            encrypted_token = self.db.get_riskbird_config('token')
-            app_uuid = self.db.get_riskbird_config('app_uuid')
+            if config.get('token_set_id'):
+                # Use token from token set
+                token_set = self.db.get_token_set(config['token_set_id'])
+                if token_set:
+                    encrypted_token = token_set['token']
+                    app_uuid = token_set['app_uuid']
+                else:
+                    # Token set was deleted, fall back
+                    encrypted_token = self.db.get_riskbird_config('token')
+                    app_uuid = self.db.get_riskbird_config('app_uuid')
+            else:
+                # Fall back to legacy config
+                encrypted_token = self.db.get_riskbird_config('token')
+                app_uuid = self.db.get_riskbird_config('app_uuid')
 
             if not encrypted_token or not app_uuid:
                 result['error'] = 'API credentials not configured'
