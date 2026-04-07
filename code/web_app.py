@@ -773,6 +773,159 @@ def test_token_connection():
     return jsonify({'success': True, 'message': '连接测试成功'})
 
 
+# ==================== Token Sets API ====================
+
+@app.route('/api/monitoring/token-sets', methods=['GET'])
+def get_token_sets():
+    """Get all token sets (with masked tokens)"""
+    from token_service import TokenService
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    token_sets = db.get_all_token_sets()
+
+    # Decrypt and mask tokens for display
+    token_service = TokenService()
+
+    for ts in token_sets:
+        try:
+            decrypted = token_service.decrypt(ts['token'])
+            ts['token'] = token_service.mask_token(decrypted)
+        except Exception:
+            ts['token'] = '****'
+
+    db.close()
+    return jsonify({'success': True, 'token_sets': token_sets})
+
+
+@app.route('/api/monitoring/token-sets', methods=['POST'])
+def create_token_set():
+    """Create a new token set"""
+    from token_service import TokenService
+
+    data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
+
+    name = data.get('name', '').strip()
+    token = data.get('token', '').strip()
+    app_uuid = data.get('app_uuid', '').strip()
+
+    if not name or not token or not app_uuid:
+        return jsonify({'success': False, 'error': '名称、Token 和 App UUID 不能为空'}), 400
+
+    # Encrypt token before storage
+    token_service = TokenService()
+    encrypted_token = token_service.encrypt(token)
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    try:
+        token_set_id = db.insert_token_set(name, encrypted_token, app_uuid)
+        db.close()
+        return jsonify({'success': True, 'id': token_set_id, 'message': 'Token 套餐创建成功'})
+    except Exception as e:
+        db.close()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/monitoring/token-sets/<int:token_set_id>', methods=['PUT'])
+def update_token_set_route(token_set_id):
+    """Update a token set"""
+    from token_service import TokenService
+
+    data = request.json
+    if data is None:
+        return jsonify({'success': False, 'error': '无效的JSON数据'}), 400
+
+    updates = {}
+
+    if 'name' in data:
+        updates['name'] = data['name'].strip()
+    if 'app_uuid' in data:
+        updates['app_uuid'] = data['app_uuid'].strip()
+    if 'token' in data and data['token'].strip():
+        # Encrypt new token
+        token_service = TokenService()
+        updates['token'] = token_service.encrypt(data['token'].strip())
+
+    if not updates:
+        return jsonify({'success': False, 'error': '没有需要更新的字段'}), 400
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    success = db.update_token_set(token_set_id, **updates)
+    db.close()
+
+    if success:
+        return jsonify({'success': True, 'message': '更新成功'})
+    else:
+        return jsonify({'success': False, 'error': 'Token 套餐不存在'}), 404
+
+
+@app.route('/api/monitoring/token-sets/<int:token_set_id>', methods=['DELETE'])
+def delete_token_set_route(token_set_id):
+    """Delete a token set"""
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    success = db.delete_token_set(token_set_id)
+    db.close()
+
+    if success:
+        return jsonify({'success': True, 'message': '删除成功'})
+    else:
+        return jsonify({'success': False, 'error': 'Token 套餐不存在'}), 404
+
+
+@app.route('/api/monitoring/token-sets/<int:token_set_id>/test', methods=['POST'])
+def test_token_set_connection(token_set_id):
+    """Test a specific token set's connection"""
+    from token_service import TokenService
+    from riskbird_search import call_riskbird_search_api
+
+    db = get_db()
+    if not db.conn:
+        return jsonify({'success': False, 'error': '数据库连接失败'})
+
+    token_set = db.get_token_set(token_set_id)
+    db.close()
+
+    if not token_set:
+        return jsonify({'success': False, 'error': 'Token 套餐不存在'}), 404
+
+    # Decrypt token
+    token_service = TokenService()
+    try:
+        token = token_service.decrypt(token_set['token'])
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Token解密失败: {str(e)}'})
+
+    app_uuid = token_set['app_uuid']
+
+    # Test with a minimal API call (same pattern as existing test route)
+    today = datetime.now().strftime('%Y-%m-%d')
+    search_params = {
+        'startDate': today,
+        'endDate': today,
+        'page': 1,
+        'pageSize': 1
+    }
+
+    result = call_riskbird_search_api(token, app_uuid, search_params)
+    if 'error' in result:
+        return jsonify({'success': False, 'error': result.get('message', '连接测试失败')})
+
+    return jsonify({'success': True, 'message': '连接测试成功'})
+
+
 @app.route('/api/monitoring/configs', methods=['GET'])
 def get_monitoring_configs():
     """Get all monitoring configurations"""
@@ -781,6 +934,15 @@ def get_monitoring_configs():
         return jsonify({'success': False, 'error': '数据库连接失败'})
 
     configs = db.get_all_monitoring_configs()
+
+    # Enrich each config with token_set_name
+    for config in configs:
+        if config.get('token_set_id'):
+            ts = db.get_token_set(config['token_set_id'])
+            config['token_set_name'] = ts['name'] if ts else None
+        else:
+            config['token_set_name'] = None
+
     db.close()
 
     return jsonify({'success': True, 'configs': configs})
@@ -794,10 +956,19 @@ def get_monitoring_config_detail(config_id):
         return jsonify({'success': False, 'error': '数据库连接失败'})
 
     config = db.get_monitoring_config(config_id)
-    db.close()
 
     if not config:
+        db.close()
         return jsonify({'success': False, 'error': '配置不存在'}), 404
+
+    # Enrich with token_set_name
+    if config.get('token_set_id'):
+        ts = db.get_token_set(config['token_set_id'])
+        config['token_set_name'] = ts['name'] if ts else None
+    else:
+        config['token_set_name'] = None
+
+    db.close()
 
     # Parse region_codes from JSON string
     import json
@@ -829,6 +1000,9 @@ def create_monitoring_config():
     feishu_enabled = data.get('feishu_enabled', False)
     feishu_target_type = data.get('feishu_target_type', '').strip()
     feishu_group_id = data.get('feishu_group_id', '').strip()
+
+    # Token set ID for API authentication
+    token_set_id = data.get('token_set_id') or None
 
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
@@ -865,7 +1039,8 @@ def create_monitoring_config():
             interval_minutes=interval_minutes,
             reg_cap=reg_cap if reg_cap else None,
             monitoring_start_time=monitoring_start_time,
-            monitoring_end_time=monitoring_end_time
+            monitoring_end_time=monitoring_end_time,
+            token_set_id=token_set_id
         )
 
         if not config_id:
@@ -972,6 +1147,10 @@ def update_monitoring_config(config_id):
             feishu_group_id = data['feishu_group_id'].strip() if data['feishu_group_id'] else None
             if feishu_group_id and feishu_group_id.strip():
                 updates['feishu_group_id'] = feishu_group_id
+
+        # Handle token_set_id
+        if 'token_set_id' in data:
+            updates['token_set_id'] = data['token_set_id'] or None
 
         success = db.update_monitoring_config(config_id, **updates)
 

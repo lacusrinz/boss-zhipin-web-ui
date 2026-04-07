@@ -1080,7 +1080,8 @@ class BOSSDatabase:
     def insert_monitoring_config(self, config_name: str, region_codes: str,
                                  interval_minutes: int = 5, reg_cap: str = None,
                                  monitoring_start_time: str = '09:00',
-                                 monitoring_end_time: str = '18:00') -> Optional[int]:
+                                 monitoring_end_time: str = '18:00',
+                                 token_set_id: int = None) -> Optional[int]:
         """
         Insert monitoring config
 
@@ -1091,6 +1092,7 @@ class BOSSDatabase:
             reg_cap: Registered capital filter (optional)
             monitoring_start_time: Monitoring start time (default '09:00')
             monitoring_end_time: Monitoring end time (default '18:00')
+            token_set_id: Token set ID for API authentication (optional)
 
         Returns:
             int: Config ID or None
@@ -1103,9 +1105,9 @@ class BOSSDatabase:
 
             self.cursor.execute("""
                 INSERT INTO monitoring_configs
-                (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time))
+                (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id))
             self.conn.commit()
 
             return self.cursor.lastrowid
@@ -1124,6 +1126,7 @@ class BOSSDatabase:
             self.cursor.execute("""
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
+                       token_set_id,
                        created_at, updated_at
                 FROM monitoring_configs
                 ORDER BY id DESC
@@ -1131,6 +1134,7 @@ class BOSSDatabase:
             rows = self.cursor.fetchall()
             columns = ['id', 'config_name', 'region_codes', 'is_active',
                       'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
+                      'token_set_id',
                       'created_at', 'updated_at']
             return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
