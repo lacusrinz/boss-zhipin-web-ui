@@ -105,44 +105,38 @@
 
     <!-- Token Configuration Modal -->
     <div id="token-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 700px;">
             <span class="close" onclick="closeTokenModal()">&times;</span>
             <h2 class="text-xl font-semibold mb-4">RiskBird API 配置</h2>
 
-            <form id="token-form" class="space-y-4">
-                <div>
-                    <label for="token-input" class="block text-sm font-medium text-gray-700 mb-1">Token</label>
-                    <input type="text" name="token" id="token-input"
-                           class="w-full border rounded px-3 py-2"
-                           placeholder="输入JWT Token">
-                </div>
-
-                <div>
-                    <label for="uuid-input" class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
-                    <input type="text" name="app_uuid" id="uuid-input"
-                           class="w-full border rounded px-3 py-2"
-                           placeholder="输入App UUID（如：WEB-B411E1DF...）">
-                </div>
-
-                <div class="flex space-x-4">
-                    <button type="submit"
-                            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                        保存配置
-                    </button>
-                    <button type="button" id="test-connection-btn"
-                            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-                        测试连接
-                    </button>
-                    <button type="button" onclick="closeTokenModal()"
-                            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
-                        取消
-                    </button>
-                </div>
-            </form>
-
-            <div id="token-status" class="mt-4 p-3 rounded hidden">
-                <span class="text-sm">状态: <span id="status-text"></span></span>
+            <!-- Token 套餐列表 -->
+            <div id="token-sets-list" class="space-y-2 mb-4">
             </div>
+
+            <!-- 添加/编辑表单 -->
+            <div id="token-set-form" class="hidden border rounded p-4 bg-gray-50 space-y-3 mb-4">
+                <h3 id="token-set-form-title" class="font-medium">添加 Token 套餐</h3>
+                <input type="hidden" id="edit-token-set-id" value="">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">备注名称</label>
+                    <input type="text" id="ts-name-input" class="w-full border rounded px-3 py-2" placeholder="如：主账号">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Token</label>
+                    <input type="text" id="ts-token-input" class="w-full border rounded px-3 py-2" placeholder="输入 JWT Token">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">App UUID</label>
+                    <input type="text" id="ts-uuid-input" class="w-full border rounded px-3 py-2" placeholder="如：WEB-B411E1DF...">
+                </div>
+                <div class="flex space-x-2">
+                    <button type="button" onclick="saveTokenSet()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">保存</button>
+                    <button type="button" onclick="cancelTokenSetForm()" class="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500 text-sm">取消</button>
+                </div>
+            </div>
+
+            <button type="button" onclick="showAddTokenSetForm()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm">+ 添加 Token 套餐</button>
+            <button type="button" onclick="closeTokenModal()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm ml-2">关闭</button>
         </div>
     </div>
 
@@ -346,6 +340,15 @@
                             <span>5000万以上</span>
                         </label>
                     </div>
+                </div>
+
+                <div>
+                    <label for="token-set-select" class="block text-sm font-medium text-gray-700 mb-1">Token 套餐</label>
+                    <select name="token_set_id" id="token-set-select"
+                            class="w-full border rounded px-3 py-2">
+                        <option value="">默认（旧配置）</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">选择该监测任务使用的 API Token</p>
                 </div>
 
                 <!-- 飞书消息推送配置 -->
@@ -561,7 +564,7 @@
 // Modal functions
 function openTokenModal() {
     document.getElementById('token-modal').style.display = 'block';
-    loadTokenConfig();
+    loadTokenSets();
 }
 
 function closeTokenModal() {
@@ -621,6 +624,14 @@ async function openEditConfigModal(configId) {
         document.getElementById('feishu-group-id').value = config.feishu_group_id || '';
         toggleFeishuFields();
 
+        // Set token set dropdown
+        const tokenSetSelect = document.getElementById('token-set-select');
+        if (config.token_set_id) {
+            tokenSetSelect.value = config.token_set_id;
+        } else {
+            tokenSetSelect.value = '';
+        }
+
         // Show modal
         document.getElementById('config-modal').style.display = 'block';
 
@@ -645,77 +656,6 @@ window.onclick = function(event) {
         configModal.style.display = 'none';
     }
 }
-
-// Token Configuration
-document.getElementById('token-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = {
-        token: formData.get('token'),
-        app_uuid: formData.get('app_uuid')
-    };
-
-    const btn = e.target.querySelector('button[type="submit"]');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '保存中...';
-
-    fetch('/api/monitoring/token', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        return response.json();
-    })
-    .then(result => {
-        if (result.success) {
-            alert('配置保存成功！');
-            loadTokenConfig();
-        } else {
-            alert('保存失败: ' + result.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('请求失败，请稍后重试');
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-    });
-});
-
-document.getElementById('test-connection-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('test-connection-btn');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '测试中...';
-
-    fetch('/api/monitoring/token/test', {
-        method: 'POST'
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        return response.json();
-    })
-    .then(result => {
-        alert(result.success ? result.message : '连接失败: ' + result.error);
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('请求失败，请稍后重试');
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-    });
-});
 
 // Helper functions for region selection
 function selectAllRegions() {
@@ -829,7 +769,8 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
         // 飞书设置
         feishu_enabled: document.getElementById('feishu-enabled').checked,
         feishu_target_type: formData.get('feishu_target_type'),
-        feishu_group_id: formData.get('feishu_group_id')
+        feishu_group_id: formData.get('feishu_group_id'),
+        token_set_id: formData.get('token_set_id') || null
     };
 
     const btn = e.target.querySelector('button[type="submit"]');
@@ -902,34 +843,139 @@ document.getElementById('monitoring-config-form').addEventListener('submit', asy
 });
 
 // Load functions
-async function loadTokenConfig() {
-    fetch('/api/monitoring/token')
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
+async function loadTokenSets() {
+    try {
+        const response = await fetch('/api/monitoring/token-sets');
+        const result = await response.json();
+        if (!result.success) return;
+
+        const list = document.getElementById('token-sets-list');
+        if (result.token_sets.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-500">暂无 Token 套餐，请点击下方按钮添加</p>';
+        } else {
+            list.innerHTML = result.token_sets.map(ts => `
+                <div class="flex items-center justify-between border rounded p-3 bg-white">
+                    <div>
+                        <span class="font-medium">${ts.name}</span>
+                        <span class="text-xs text-gray-500 ml-2">${ts.token}</span>
+                        <span class="text-xs text-gray-400 ml-2">${ts.app_uuid}</span>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="testTokenSet(${ts.id})" class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">测试</button>
+                        <button onclick="editTokenSet(${ts.id}, '${ts.name}', '${ts.app_uuid}')" class="text-xs bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600">编辑</button>
+                        <button onclick="deleteTokenSet(${ts.id})" class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">删除</button>
+                    </div>
+                </div>
+            `).join('');
         }
-        return response.json();
-    })
-    .then(result => {
-        if (result.success) {
-            document.getElementById('token-input').value = result.configs.token || '';
-            document.getElementById('uuid-input').value = result.configs.app_uuid || '';
-            const statusDiv = document.getElementById('token-status');
-            statusDiv.classList.remove('hidden');
-            if (result.configs.token && result.configs.app_uuid) {
-                statusDiv.classList.remove('bg-red-100');
-                statusDiv.classList.add('bg-green-100');
-                document.getElementById('status-text').textContent = '✅ 已配置';
-            } else {
-                statusDiv.classList.remove('bg-green-100');
-                statusDiv.classList.add('bg-red-100');
-                document.getElementById('status-text').textContent = '⚠️ 未配置';
-            }
-        }
-    })
-    .catch(error => {
-        console.error('Error loading token config:', error);
+
+        // Also update the dropdown in monitoring config form
+        updateTokenSetDropdown(result.token_sets);
+    } catch (error) {
+        console.error('Error loading token sets:', error);
+    }
+}
+
+function updateTokenSetDropdown(tokenSets) {
+    const select = document.getElementById('token-set-select');
+    if (!select) return;
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">默认（旧配置）</option>';
+    tokenSets.forEach(ts => {
+        const opt = document.createElement('option');
+        opt.value = ts.id;
+        opt.textContent = ts.name;
+        select.appendChild(opt);
     });
+    select.value = currentVal;
+}
+
+function showAddTokenSetForm() {
+    document.getElementById('token-set-form').classList.remove('hidden');
+    document.getElementById('token-set-form-title').textContent = '添加 Token 套餐';
+    document.getElementById('edit-token-set-id').value = '';
+    document.getElementById('ts-name-input').value = '';
+    document.getElementById('ts-token-input').value = '';
+    document.getElementById('ts-token-input').placeholder = '输入 JWT Token';
+    document.getElementById('ts-uuid-input').value = '';
+    document.getElementById('ts-name-input').focus();
+}
+
+function cancelTokenSetForm() {
+    document.getElementById('token-set-form').classList.add('hidden');
+}
+
+function editTokenSet(id, name, appUuid) {
+    document.getElementById('token-set-form').classList.remove('hidden');
+    document.getElementById('token-set-form-title').textContent = '编辑 Token 套餐';
+    document.getElementById('edit-token-set-id').value = id;
+    document.getElementById('ts-name-input').value = name;
+    document.getElementById('ts-token-input').value = '';
+    document.getElementById('ts-token-input').placeholder = '留空则不修改';
+    document.getElementById('ts-uuid-input').value = appUuid;
+}
+
+async function saveTokenSet() {
+    const editId = document.getElementById('edit-token-set-id').value;
+    const name = document.getElementById('ts-name-input').value.trim();
+    const token = document.getElementById('ts-token-input').value.trim();
+    const appUuid = document.getElementById('ts-uuid-input').value.trim();
+
+    if (!name || !appUuid) {
+        alert('名称和 App UUID 不能为空');
+        return;
+    }
+    if (!editId && !token) {
+        alert('Token 不能为空');
+        return;
+    }
+
+    const url = editId ? `/api/monitoring/token-sets/${editId}` : '/api/monitoring/token-sets';
+    const method = editId ? 'PUT' : 'POST';
+    const body = { name, app_uuid: appUuid };
+    if (token) body.token = token;
+
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (result.success) {
+            cancelTokenSetForm();
+            loadTokenSets();
+        } else {
+            alert('操作失败: ' + result.error);
+        }
+    } catch (error) {
+        alert('请求失败');
+    }
+}
+
+async function testTokenSet(id) {
+    try {
+        const response = await fetch(`/api/monitoring/token-sets/${id}/test`, { method: 'POST' });
+        const result = await response.json();
+        alert(result.success ? result.message : '测试失败: ' + result.error);
+    } catch (error) {
+        alert('请求失败');
+    }
+}
+
+async function deleteTokenSet(id) {
+    if (!confirm('确定删除该 Token 套餐？')) return;
+    try {
+        const response = await fetch(`/api/monitoring/token-sets/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (result.success) {
+            loadTokenSets();
+        } else {
+            alert('删除失败: ' + result.error);
+        }
+    } catch (error) {
+        alert('请求失败');
+    }
 }
 
 async function loadJobs() {
@@ -1277,6 +1323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStats();
     loadRuns();
     loadCompanies();
+    loadTokenSets();
 });
 
 // Auto-refresh every 30 seconds
