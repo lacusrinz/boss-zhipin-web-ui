@@ -135,3 +135,70 @@ class TestGetQueryDate:
             mock_dt.timedelta = real_dt.timedelta
             result = self.monitor._get_query_date({'cross_day_cutoff_time': ''})
             assert result == '2026-05-07￥2026-05-07'
+
+
+from unittest.mock import patch, MagicMock
+
+
+class TestCrossDayIntegration:
+    def test_full_flow_cross_day(self):
+        """Integration: create config with cutoff, verify _get_query_date uses it"""
+        db = BOSSDatabase(':memory:')
+        db.connect()
+        db.init_monitoring_tables()
+
+        config_id = db.insert_monitoring_config(
+            config_name='cross-day-test',
+            region_codes='["110000"]',
+            interval_minutes=5,
+            cross_day_cutoff_time='06:00'
+        )
+
+        config = db.get_monitoring_config(config_id)
+        assert config['cross_day_cutoff_time'] == '06:00'
+
+        monitor = RiskBirdMonitor(db)
+
+        # Simulate 3 AM — should query yesterday
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 3, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            es_date = monitor._get_query_date(config)
+            assert es_date == '2026-05-06￥2026-05-06'
+
+        # Simulate 10 AM — should query today
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 10, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            es_date = monitor._get_query_date(config)
+            assert es_date == '2026-05-07￥2026-05-07'
+
+        db.close()
+
+    def test_migration_adds_column_to_existing_db(self):
+        """Verify migration adds column to table created without it"""
+        db = BOSSDatabase(':memory:')
+        db.connect()
+        # Create table WITHOUT cross_day_cutoff_time
+        db.cursor.execute("""
+            CREATE TABLE monitoring_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                config_name TEXT NOT NULL,
+                region_codes TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                interval_minutes INTEGER DEFAULT 5
+            )
+        """)
+        db.conn.commit()
+
+        # Run migration
+        db._migrate_monitoring_tables()
+
+        # Verify column exists
+        db.cursor.execute("PRAGMA table_info(monitoring_configs)")
+        columns = [row[1] for row in db.cursor.fetchall()]
+        assert 'cross_day_cutoff_time' in columns
+
+        db.close()
