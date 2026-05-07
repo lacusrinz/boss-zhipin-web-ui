@@ -1089,7 +1089,8 @@ class BOSSDatabase:
                                  interval_minutes: int = 5, reg_cap: str = None,
                                  monitoring_start_time: str = '09:00',
                                  monitoring_end_time: str = '18:00',
-                                 token_set_id: int = None) -> Optional[int]:
+                                 token_set_id: int = None,
+                                 cross_day_cutoff_time: str = None) -> Optional[int]:
         """
         Insert monitoring config
 
@@ -1101,6 +1102,7 @@ class BOSSDatabase:
             monitoring_start_time: Monitoring start time (default '09:00')
             monitoring_end_time: Monitoring end time (default '18:00')
             token_set_id: Token set ID for API authentication (optional)
+            cross_day_cutoff_time: Cross-day cutoff time for monitoring (optional)
 
         Returns:
             int: Config ID or None
@@ -1113,9 +1115,9 @@ class BOSSDatabase:
 
             self.cursor.execute("""
                 INSERT INTO monitoring_configs
-                (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id))
+                (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id, cross_day_cutoff_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (config_name, region_codes, interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time, token_set_id, cross_day_cutoff_time))
             self.conn.commit()
 
             return self.cursor.lastrowid
@@ -1134,7 +1136,7 @@ class BOSSDatabase:
             self.cursor.execute("""
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
-                       token_set_id,
+                       token_set_id, cross_day_cutoff_time,
                        created_at, updated_at
                 FROM monitoring_configs
                 ORDER BY id DESC
@@ -1142,7 +1144,7 @@ class BOSSDatabase:
             rows = self.cursor.fetchall()
             columns = ['id', 'config_name', 'region_codes', 'is_active',
                       'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
-                      'token_set_id',
+                      'token_set_id', 'cross_day_cutoff_time',
                       'created_at', 'updated_at']
             return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
@@ -1196,7 +1198,8 @@ class BOSSDatabase:
         # Validate column names
         ALLOWED_COLUMNS = {'config_name', 'region_codes', 'is_active', 'interval_minutes', 'reg_cap',
                           'monitoring_start_time', 'monitoring_end_time', 'feishu_enabled',
-                          'feishu_target_type', 'feishu_group_id', 'token_set_id'}
+                          'feishu_target_type', 'feishu_group_id', 'token_set_id',
+                          'cross_day_cutoff_time'}
         invalid_columns = set(kwargs.keys()) - ALLOWED_COLUMNS
         if invalid_columns:
             logging.error(f"Invalid columns: {invalid_columns}")
