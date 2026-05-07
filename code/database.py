@@ -747,6 +747,7 @@ class BOSSDatabase:
                     feishu_app_secret TEXT,
                     feishu_group_id TEXT,
                     feishu_target_type TEXT DEFAULT 'group',
+                    cross_day_cutoff_time TEXT DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -904,6 +905,13 @@ class BOSSDatabase:
                     ADD COLUMN token_set_id INTEGER REFERENCES riskbird_token_sets(id) ON DELETE SET NULL
                 """)
                 logging.info("Added token_set_id column to monitoring_configs")
+
+            if 'cross_day_cutoff_time' not in columns:
+                self.cursor.execute("""
+                    ALTER TABLE monitoring_configs
+                    ADD COLUMN cross_day_cutoff_time TEXT DEFAULT NULL
+                """)
+                logging.info("Added cross_day_cutoff_time column to monitoring_configs")
 
             self.conn.commit()
         except Exception as e:
@@ -1156,7 +1164,7 @@ class BOSSDatabase:
                 SELECT id, config_name, region_codes, is_active,
                        interval_minutes, reg_cap, monitoring_start_time, monitoring_end_time,
                        feishu_enabled, feishu_target_type, feishu_group_id,
-                       token_set_id,
+                       token_set_id, cross_day_cutoff_time,
                        created_at, updated_at
                 FROM monitoring_configs
                 WHERE id = ?
@@ -1166,7 +1174,7 @@ class BOSSDatabase:
                 columns = ['id', 'config_name', 'region_codes', 'is_active',
                           'interval_minutes', 'reg_cap', 'monitoring_start_time', 'monitoring_end_time',
                           'feishu_enabled', 'feishu_target_type', 'feishu_group_id',
-                          'token_set_id',
+                          'token_set_id', 'cross_day_cutoff_time',
                           'created_at', 'updated_at']
                 return dict(zip(columns, row))
             return None
