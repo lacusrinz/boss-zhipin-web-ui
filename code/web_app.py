@@ -1004,11 +1004,19 @@ def create_monitoring_config():
     # Token set ID for API authentication
     token_set_id = data.get('token_set_id') or None
 
+    # Cross-day monitoring cutoff time
+    cross_day_cutoff_time = data.get('cross_day_cutoff_time', '').strip()
+    if cross_day_cutoff_time:
+        if not validate_time_format(cross_day_cutoff_time):
+            return jsonify({'success': False, 'error': '跨天截止时间格式无效，请使用HH:MM格式（例如：06:00）'}), 400
+    else:
+        cross_day_cutoff_time = None
+
     if not config_name:
         return jsonify({'success': False, 'error': '配置名称不能为空'}), 400
 
-    if not isinstance(region_codes, list) or not region_codes:
-        return jsonify({'success': False, 'error': '地区代码必须是非空数组'}), 400
+    if not isinstance(region_codes, list):
+        return jsonify({'success': False, 'error': '地区代码格式无效'}), 400
 
     if not isinstance(interval_minutes, int) or not (1 <= interval_minutes <= 1440):
         return jsonify({'success': False, 'error': '监控间隔必须在1-1440分钟之间'}), 400
@@ -1040,7 +1048,8 @@ def create_monitoring_config():
             reg_cap=reg_cap if reg_cap else None,
             monitoring_start_time=monitoring_start_time,
             monitoring_end_time=monitoring_end_time,
-            token_set_id=token_set_id
+            token_set_id=token_set_id,
+            cross_day_cutoff_time=cross_day_cutoff_time
         )
 
         if not config_id:
@@ -1151,6 +1160,17 @@ def update_monitoring_config(config_id):
         # Handle token_set_id
         if 'token_set_id' in data:
             updates['token_set_id'] = data['token_set_id'] or None
+
+        # Handle cross_day_cutoff_time
+        if 'cross_day_cutoff_time' in data:
+            cross_day_cutoff_time = data['cross_day_cutoff_time']
+            if cross_day_cutoff_time:
+                cross_day_cutoff_time = str(cross_day_cutoff_time).strip()
+                if cross_day_cutoff_time and not validate_time_format(cross_day_cutoff_time):
+                    return jsonify({'success': False, 'error': '跨天截止时间格式无效，请使用HH:MM格式（例如：06:00）'}), 400
+                updates['cross_day_cutoff_time'] = cross_day_cutoff_time
+            else:
+                updates['cross_day_cutoff_time'] = None
 
         success = db.update_monitoring_config(config_id, **updates)
 
