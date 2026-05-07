@@ -81,3 +81,57 @@ class TestCrossDayCRUD:
         db.update_monitoring_config(config_id, cross_day_cutoff_time=None)
         config = db.get_monitoring_config(config_id)
         assert config['cross_day_cutoff_time'] is None
+
+
+from unittest.mock import patch
+from riskbird_monitor import RiskBirdMonitor
+
+
+class TestGetQueryDate:
+    def setup_method(self):
+        self.monitor = RiskBirdMonitor()
+
+    def test_no_cutoff_returns_today(self):
+        """When cross_day_cutoff_time is None, return today"""
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 3, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            result = self.monitor._get_query_date({'cross_day_cutoff_time': None})
+            assert result == '2026-05-07￥2026-05-07'
+
+    def test_before_cutoff_returns_yesterday(self):
+        """When current time is before cutoff, return yesterday"""
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 3, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            result = self.monitor._get_query_date({'cross_day_cutoff_time': '06:00'})
+            assert result == '2026-05-06￥2026-05-06'
+
+    def test_after_cutoff_returns_today(self):
+        """When current time is after cutoff, return today"""
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 10, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            result = self.monitor._get_query_date({'cross_day_cutoff_time': '06:00'})
+            assert result == '2026-05-07￥2026-05-07'
+
+    def test_exactly_at_cutoff_returns_today(self):
+        """When current time equals cutoff, return today"""
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 6, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            result = self.monitor._get_query_date({'cross_day_cutoff_time': '06:00'})
+            assert result == '2026-05-07￥2026-05-07'
+
+    def test_empty_string_cutoff_returns_today(self):
+        """Empty string cutoff behaves like disabled"""
+        with patch('riskbird_monitor.datetime') as mock_dt:
+            real_dt = __import__('datetime')
+            mock_dt.now.return_value = real_dt.datetime(2026, 5, 7, 3, 0, 0)
+            mock_dt.timedelta = real_dt.timedelta
+            result = self.monitor._get_query_date({'cross_day_cutoff_time': ''})
+            assert result == '2026-05-07￥2026-05-07'

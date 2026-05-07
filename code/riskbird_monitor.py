@@ -7,7 +7,7 @@ import logging
 import json
 import time
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from database import BOSSDatabase
 from riskbird_search import build_search_params, call_riskbird_search_api
@@ -25,6 +25,30 @@ class RiskBirdMonitor:
         """
         self.db = db
         self.logger = logging.getLogger(__name__)
+
+    def _get_query_date(self, config: Dict) -> str:
+        """
+        Determine the esdate query string based on cross_day_cutoff_time.
+
+        Args:
+            config: Monitoring config dict
+
+        Returns:
+            str: esdate in format 'YYYY-MM-DD￥YYYY-MM-DD'
+        """
+        cutoff = config.get('cross_day_cutoff_time')
+        if cutoff:
+            now = datetime.now()
+            try:
+                cutoff_hour, cutoff_minute = map(int, cutoff.split(':'))
+                cutoff_time = now.replace(hour=cutoff_hour, minute=cutoff_minute, second=0, microsecond=0)
+                if now < cutoff_time:
+                    yesterday = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+                    return f'{yesterday}￥{yesterday}'
+            except (ValueError, AttributeError):
+                pass
+        today = datetime.now().strftime('%Y-%m-%d')
+        return f'{today}￥{today}'
 
     def build_search_params_from_config(self, config: Dict) -> Dict:
         """
@@ -46,9 +70,8 @@ class RiskBirdMonitor:
 
         region_codes_str = ','.join(region_codes) if region_codes else ''
 
-        # Set date range to today only
-        today = datetime.now().strftime('%Y-%m-%d')
-        es_date = f'{today}￥{today}'
+        # Determine date based on cross_day_cutoff_time config
+        es_date = self._get_query_date(config)
 
         reg_cap = config.get('reg_cap', '')
 
@@ -192,9 +215,13 @@ class RiskBirdMonitor:
             MAX_REGIONS_PER_REQUEST = 5
             region_batches = []
 
-            for i in range(0, len(region_codes), MAX_REGIONS_PER_REQUEST):
-                batch = region_codes[i:i + MAX_REGIONS_PER_REQUEST]
-                region_batches.append(batch)
+            if not region_codes:
+                # No region filter: query all regions in a single request
+                region_batches = [[]]
+            else:
+                for i in range(0, len(region_codes), MAX_REGIONS_PER_REQUEST):
+                    batch = region_codes[i:i + MAX_REGIONS_PER_REQUEST]
+                    region_batches.append(batch)
 
             self.logger.info(f"Querying RiskBird API: {len(region_codes)} regions in {len(region_batches)} batch(es)")
 
@@ -213,8 +240,7 @@ class RiskBirdMonitor:
                     time.sleep(delay)
 
                 # Build search params for this batch
-                today = datetime.now().strftime('%Y-%m-%d')
-                es_date = f'{today}￥{today}'
+                es_date = self._get_query_date(config)
                 reg_cap = config.get('reg_cap', '')
 
                 # Pagination settings
